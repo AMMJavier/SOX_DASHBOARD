@@ -13,21 +13,21 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from oracle_database import get_oracle_db
+from assets_database import get_assets_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 FROM_SQL = """
-    FROM AUTOM.INVENTARIO_DISPOSITIVOS_LOG l
-    LEFT JOIN AUTOM.INVENTARIO_DISPOSITIVOS d ON d.ID = l.DISPOSITIVO_ID
+    FROM inventario_dispositivos_log l
+    LEFT JOIN inventario_dispositivos d ON d.ID = l.DISPOSITIVO_ID
 """
 
-# Un guion equivale a un valor vacío. No mostrar como cambio valores iguales
-# después de quitar espacios, incluso si el trigger los registró en Oracle.
+# Un guion o un texto vacío equivalen a "sin valor". No mostrar como cambio
+# valores iguales después de quitar espacios, aunque el trigger los registre.
 REAL_CHANGE = """
-    NVL(NULLIF(TRIM(l.VALOR_ANTERIOR), '-'), CHR(1)) <>
-    NVL(NULLIF(TRIM(l.VALOR_NUEVO), '-'), CHR(1))
+    COALESCE(NULLIF(NULLIF(TRIM(l.VALOR_ANTERIOR), '-'), ''), CHR(1)) <>
+    COALESCE(NULLIF(NULLIF(TRIM(l.VALOR_NUEVO), '-'), ''), CHR(1))
 """
 
 LOG_FIELDS = """
@@ -52,9 +52,9 @@ def _filters(search=None, campo=None, serial=None, operacion=None,
 
     if search and search.strip():
         conditions.append("""(
-            UPPER(NVL(d.DISPOSITIVO, ' ')) LIKE :search
-            OR UPPER(NVL(d.SERIAL, ' ')) LIKE :search
-            OR TO_CHAR(l.DISPOSITIVO_ID) LIKE :search
+            UPPER(COALESCE(d.DISPOSITIVO, ' ')) LIKE :search
+            OR UPPER(COALESCE(d.SERIAL, ' ')) LIKE :search
+            OR CAST(l.DISPOSITIVO_ID AS TEXT) LIKE :search
         )""")
         params["search"] = f"%{search.strip().upper()}%"
 
@@ -109,7 +109,7 @@ def get_asset_logs(
     fecha_fin: Optional[date] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     """Historial completo por campo; el frontend lo utiliza para exportar TODO.
 
@@ -121,7 +121,7 @@ def get_asset_logs(
         rows = db.execute(text(f"""
             SELECT {LOG_FIELDS} {FROM_SQL} {where_sql}
             ORDER BY l.FECHA_CAMBIO DESC, l.LOG_ID DESC
-            OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY
+            LIMIT :page_size OFFSET :offset
         """), {**params, "offset": (page - 1) * page_size, "page_size": page_size}).mappings().all()
         return {
             "items": [_serialize(row) for row in rows],
@@ -142,7 +142,7 @@ def get_asset_logs_summary(
     fecha_fin: Optional[date] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     """UNA FILA POR ACTIVO, con cantidad de campos y última modificación.
 
@@ -155,7 +155,7 @@ def get_asset_logs_summary(
                 SELECT l.DISPOSITIVO_ID
                 {FROM_SQL} {where_sql}
                 GROUP BY l.DISPOSITIVO_ID
-            )
+            ) AS agrupado
         """), params).scalar() or 0)
 
         rows = db.execute(text(f"""
@@ -165,16 +165,13 @@ def get_asset_logs_summary(
                 d.SERIAL AS "serial",
                 MAX(l.FECHA_CAMBIO) AS "fecha_cambio",
                 COUNT(*) AS "total_cambios",
-                MAX(l.USUARIO) KEEP (
-                    DENSE_RANK LAST ORDER BY l.FECHA_CAMBIO, l.LOG_ID
-                ) AS "usuario",
-                MAX(l.ORIGEN) KEEP (
-                    DENSE_RANK LAST ORDER BY l.FECHA_CAMBIO, l.LOG_ID
-                ) AS "origen"
+                -- Usuario/origen del cambio más reciente (equivale a KEEP DENSE_RANK LAST de Oracle).
+                (ARRAY_AGG(l.USUARIO ORDER BY l.FECHA_CAMBIO DESC, l.LOG_ID DESC))[1] AS "usuario",
+                (ARRAY_AGG(l.ORIGEN ORDER BY l.FECHA_CAMBIO DESC, l.LOG_ID DESC))[1] AS "origen"
             {FROM_SQL} {where_sql}
             GROUP BY l.DISPOSITIVO_ID, d.DISPOSITIVO, d.SERIAL
             ORDER BY MAX(l.FECHA_CAMBIO) DESC, l.DISPOSITIVO_ID DESC
-            OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY
+            LIMIT :page_size OFFSET :offset
         """), {**params, "offset": (page - 1) * page_size, "page_size": page_size}).mappings().all()
 
         return {
@@ -197,7 +194,7 @@ def get_asset_logs_by_device(
     fecha_fin: Optional[date] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=200),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     """Detalle desplegable paginado: campos con antes, después y fecha exacta."""
     where_sql, params = _filters(search, campo, serial, operacion,
@@ -207,7 +204,7 @@ def get_asset_logs_by_device(
         rows = db.execute(text(f"""
             SELECT {LOG_FIELDS} {FROM_SQL} {where_sql}
             ORDER BY l.FECHA_CAMBIO DESC, l.LOG_ID DESC
-            OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY
+            LIMIT :page_size OFFSET :offset
         """), {**params, "offset": (page - 1) * page_size, "page_size": page_size}).mappings().all()
         return {
             "items": [_serialize(row) for row in rows],

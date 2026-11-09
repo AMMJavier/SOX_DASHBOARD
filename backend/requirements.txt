@@ -3,3 +3,5 @@ uvicorn
 sqlalchemy
 pymysql
 python-dotenv
+oracledb
+psycopg2-binary

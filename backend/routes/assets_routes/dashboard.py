@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import Optional, Dict
-from oracle_database import get_oracle_db
+from assets_database import get_assets_db
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ def _json_value(value):
 @router.get("/dashboard")
 def get_assets_dashboard(
     ciudad: Optional[str] = Query(default=None),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     """
     Resumen del inventario. Los estados se devuelven según sus valores reales
@@ -45,7 +45,7 @@ def get_assets_dashboard(
                 SUM(CASE WHEN UPPER(TRIM(estado)) LIKE 'ACTIVO%' THEN 1 ELSE 0 END) AS activos_vigentes,
                 SUM(CASE WHEN UPPER(TRIM(estado)) LIKE 'INACTIVO/NO VIGENTE%' THEN 1 ELSE 0 END) AS inactivos_no_vigentes,
                 SUM(CASE WHEN UPPER(TRIM(estado)) LIKE 'INACTIVO/DAÑADO%' OR UPPER(TRIM(estado)) LIKE 'INACTIVO/DANADO%' THEN 1 ELSE 0 END) AS danados,
-                SUM(CASE WHEN eos < TRUNC(SYSDATE) THEN 1 ELSE 0 END) AS eos_vencido
+                SUM(CASE WHEN eos < CURRENT_DATE THEN 1 ELSE 0 END) AS eos_vencido
             FROM inventario_dispositivos
             WHERE 1=1 {city_filter}
             """,
@@ -63,8 +63,8 @@ def get_assets_dashboard(
             SELECT
                 INITCAP(LOWER(TRIM(ciudad))) AS nombre,
                 COUNT(*) AS cantidad
-            FROM AUTOM.INVENTARIO_DISPOSITIVOS
-            WHERE ciudad IS NOT NULL
+            FROM inventario_dispositivos
+            WHERE NULLIF(TRIM(ciudad), '') IS NOT NULL
               AND TRIM(ciudad) <> '-'
             GROUP BY INITCAP(LOWER(TRIM(ciudad)))
             ORDER BY cantidad DESC, nombre
@@ -75,11 +75,11 @@ def get_assets_dashboard(
             db,
             f"""
             SELECT
-                NVL(INITCAP(TRIM(tipo)), 'Sin especificar') AS nombre,
+                COALESCE(INITCAP(NULLIF(TRIM(tipo), '')), 'Sin especificar') AS nombre,
                 COUNT(*) AS cantidad
-            FROM AUTOM.INVENTARIO_DISPOSITIVOS
+            FROM inventario_dispositivos
             WHERE 1=1 {city_filter}
-            GROUP BY NVL(INITCAP(TRIM(tipo)), 'Sin especificar')
+            GROUP BY COALESCE(INITCAP(NULLIF(TRIM(tipo), '')), 'Sin especificar')
             ORDER BY cantidad DESC, nombre
             """,
             params,
@@ -88,11 +88,11 @@ def get_assets_dashboard(
         plataformas = _rows(
             db,
             f"""
-            SELECT NVL(NULLIF(TRIM(plataforma), ''), 'Sin especificar') AS nombre,
+            SELECT COALESCE(NULLIF(TRIM(plataforma), ''), 'Sin especificar') AS nombre,
                    COUNT(*) AS cantidad
             FROM inventario_dispositivos
             WHERE 1=1 {city_filter}
-            GROUP BY NVL(NULLIF(TRIM(plataforma), ''), 'Sin especificar')
+            GROUP BY COALESCE(NULLIF(TRIM(plataforma), ''), 'Sin especificar')
             ORDER BY cantidad DESC, nombre
             """,
             params,
@@ -101,11 +101,11 @@ def get_assets_dashboard(
         criticidades = _rows(
             db,
             f"""
-            SELECT NVL(NULLIF(TRIM(criticidad), ''), 'Sin especificar') AS nombre,
+            SELECT COALESCE(NULLIF(TRIM(criticidad), ''), 'Sin especificar') AS nombre,
                    COUNT(*) AS cantidad
             FROM inventario_dispositivos
             WHERE 1=1 {city_filter}
-            GROUP BY NVL(NULLIF(TRIM(criticidad), ''), 'Sin especificar')
+            GROUP BY COALESCE(NULLIF(TRIM(criticidad), ''), 'Sin especificar')
             ORDER BY cantidad DESC, nombre
             """,
             params,
@@ -114,11 +114,11 @@ def get_assets_dashboard(
         estados = _rows(
             db,
             f"""
-            SELECT NVL(NULLIF(TRIM(estado), ''), 'Sin especificar') AS nombre,
+            SELECT COALESCE(NULLIF(TRIM(estado), ''), 'Sin especificar') AS nombre,
                    COUNT(*) AS cantidad
             FROM inventario_dispositivos
             WHERE 1=1 {city_filter}
-            GROUP BY NVL(NULLIF(TRIM(estado), ''), 'Sin especificar')
+            GROUP BY COALESCE(NULLIF(TRIM(estado), ''), 'Sin especificar')
             ORDER BY cantidad DESC, nombre
             """,
             params,
@@ -138,5 +138,5 @@ def get_assets_dashboard(
     except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=500,
-            detail="No fue posible consultar el dashboard de activos en Oracle.",
+            detail="No fue posible consultar el dashboard de activos.",
         ) from exc

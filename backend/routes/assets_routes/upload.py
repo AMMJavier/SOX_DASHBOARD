@@ -9,14 +9,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from oracle_database import get_oracle_db
-
-
+from assets_database import get_assets_db, set_audit_context
+from auth.dependencies import get_current_user
+from models import Usuario
 
 
 router = APIRouter()
 
-# Columnas admitidas y longitud máxima en Oracle
+# Columnas admitidas y longitud máxima (VARCHAR en sql/postgres/assets_schema.sql)
 TEXT_COLUMNS = {
     "especialidad": 50,
     "plataforma": 50,
@@ -151,7 +151,7 @@ def save_inventory_items(db: Session, rows: List[Dict[str, Any]]):
         if identity_valid:
             existing = db.execute(
                 text("""
-                    SELECT * FROM AUTOM.INVENTARIO_DISPOSITIVOS
+                    SELECT * FROM inventario_dispositivos
                     WHERE UPPER(TRIM(FABRICANTE)) = :fabricante
                       AND UPPER(TRIM(SERIAL)) = :serial
                     FOR UPDATE
@@ -167,13 +167,13 @@ def save_inventory_items(db: Session, rows: List[Dict[str, Any]]):
             }
 
         if existing is None:
-            # Oracle guarda los campos de texto vacíos como NULL.
+            # Los campos de texto vacíos se guardan como NULL (validate_row).
             # EOS mantiene la fecha provisional porque la columna es DATE NOT NULL.
             row = {**{column: None for column in TEXT_COLUMNS}, "eos": EOS_SIN_DEFINIR, **row}
             columns = list(row.keys())
 
             statement = text(f"""
-                INSERT INTO AUTOM.INVENTARIO_DISPOSITIVOS
+                INSERT INTO inventario_dispositivos
                 ({", ".join(columns)})
                 VALUES ({", ".join(":" + c for c in columns)})
             """)
@@ -192,7 +192,7 @@ def save_inventory_items(db: Session, rows: List[Dict[str, Any]]):
                 continue
             old_value = existing[column]
 
-            # Oracle DATE puede recibirse como datetime.
+            # Por compatibilidad, normalizar si la fecha llega como datetime.
             if column == "eos" and isinstance(old_value, datetime):
                 old_value = old_value.date()
 
@@ -220,7 +220,7 @@ def save_inventory_items(db: Session, rows: List[Dict[str, Any]]):
 
         db.execute(
             text(f"""
-                UPDATE AUTOM.INVENTARIO_DISPOSITIVOS
+                UPDATE inventario_dispositivos
                 SET {assignments}
                 WHERE ID = :device_id
             """),
@@ -235,7 +235,7 @@ class UploadRequest(BaseModel):
     items: List[Dict[str, Any]]
 
 
-# Fecha de referencia para EOS no informado; Oracle EOS es DATE NOT NULL.
+# Fecha de referencia para EOS no informado; la columna EOS es DATE NOT NULL.
 EOS_SIN_DEFINIR = date(2099, 12, 31)
 
 
@@ -303,7 +303,8 @@ def validate_row(raw_row):
 @router.post("/upload/manual")
 def upload_manual(
     payload: UploadRequest,
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
+    current: Usuario = Depends(get_current_user),
 ):
     if not payload.items:
         raise HTTPException(
@@ -343,7 +344,8 @@ def upload_manual(
             },
         )
 
-    try: 
+    try:
+        set_audit_context(db, current.username, "CARGA_MANUAL")
         counters = save_inventory_items(db, validated)
         db.commit()
 
@@ -359,9 +361,9 @@ def upload_manual(
     
             raise HTTPException(
                 status_code=500,
-                detail="No fue posible completar la importación en Oracle.",
+                detail="No fue posible completar la importación.",
             ) from exc
-    
+
 # ============================================================
 # PREVISUALIZACIÓN DE ARCHIVOS CSV
 # POST /assets/upload/preview
@@ -602,7 +604,8 @@ async def preview_csv(
 @router.post("/upload/confirm")
 def confirm_csv(
     payload: UploadRequest,
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
+    current: Usuario = Depends(get_current_user),
 ):
     if not payload.items:
         raise HTTPException(
@@ -643,6 +646,7 @@ def confirm_csv(
         )
 
     try:
+        set_audit_context(db, current.username, "CARGA_CSV")
         counters = save_inventory_items(db, validated)
 
         db.commit()
@@ -665,6 +669,5 @@ def confirm_csv(
     
             raise HTTPException(
                 status_code=500,
-                detail="No fue posible completar la importación en Oracle.",
+                detail="No fue posible completar la importación.",
             ) from exc
-        

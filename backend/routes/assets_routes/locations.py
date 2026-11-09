@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from oracle_database import get_oracle_db
+from assets_database import get_assets_db
 
 router = APIRouter()
 
@@ -25,14 +25,13 @@ def normalize_city(value: str) -> str:
 @router.get("/locations")
 def get_locations(
     ciudad: Optional[str] = Query(default=None),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     try:
         result = db.execute(text("""
             SELECT TRIM(ciudad) AS ciudad, COUNT(*) AS cantidad
-            FROM AUTOM.INVENTARIO_DISPOSITIVOS
-            WHERE ciudad IS NOT NULL
-              AND TRIM(ciudad) IS NOT NULL
+            FROM inventario_dispositivos
+            WHERE NULLIF(TRIM(ciudad), '') IS NOT NULL
               AND TRIM(ciudad) <> '-'
             GROUP BY TRIM(ciudad)
         """))
@@ -53,8 +52,8 @@ def get_locations(
         items.sort(key=lambda item: (-item["cantidad"], item["ciudad"]))
 
         sin_ciudad = int(db.execute(text("""
-            SELECT COUNT(*) FROM AUTOM.INVENTARIO_DISPOSITIVOS
-            WHERE ciudad IS NULL OR TRIM(ciudad) IS NULL OR TRIM(ciudad) = '-'
+            SELECT COUNT(*) FROM inventario_dispositivos
+            WHERE NULLIF(TRIM(ciudad), '') IS NULL OR TRIM(ciudad) = '-'
         """)).scalar() or 0)
         return {
             "items": items,
@@ -65,5 +64,5 @@ def get_locations(
     except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=500,
-            detail="No fue posible consultar las ubicaciones de activos en Oracle.",
+            detail="No fue posible consultar las ubicaciones de activos.",
         ) from exc

@@ -6,13 +6,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from oracle_database import get_oracle_db
+from assets_database import get_assets_db, set_audit_context
 from auth.dependencies import get_current_user
 from models import Usuario
 from .upload import validate_row, ALLOWED_COLUMNS, INVALID_SERIALS, EOS_SIN_DEFINIR
 
 router = APIRouter()
-TABLE = "AUTOM.INVENTARIO_DISPOSITIVOS"
+# El esquema (autom) lo fija el search_path de la conexión PostgreSQL.
+TABLE = "inventario_dispositivos"
 SELECT_COLUMNS = """
     id, especialidad, plataforma, tipo, dispositivo, estado, criticidad,
     infraestructura, ip, mask, gateway, mac, localidad, piso, lado, ciudad,
@@ -29,15 +30,16 @@ def _serialize(row) -> dict:
 
 
 @router.get("/inventory/options")
-def inventory_options(db: Session = Depends(get_oracle_db)):
-    """Valores reales de Oracle, sin depender de la página actual."""
+def inventory_options(db: Session = Depends(get_assets_db)):
+    """Valores reales de la base, sin depender de la página actual."""
     try:
         options = {}
         for field in ("tipo", "ciudad", "localidad"):
+            # En PostgreSQL '' no es NULL (en Oracle sí): excluir ambos.
             rows = db.execute(text(f"""
                 SELECT DISTINCT TRIM({field}) AS valor
                 FROM {TABLE}
-                WHERE TRIM({field}) IS NOT NULL
+                WHERE NULLIF(TRIM({field}), '') IS NOT NULL
                 ORDER BY valor
             """)).scalars().all()
             options[field] = [value for value in rows if value]
@@ -60,7 +62,7 @@ def get_inventory(
     eos: Optional[str] = Query(default=None, pattern="^(vencido|generico|vigente)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
 ):
     conditions = []
     params = {}
@@ -83,29 +85,29 @@ def get_inventory(
 
     if q and q.strip():
         conditions.append("""(
-            UPPER(NVL(dispositivo, ' ')) LIKE :q OR
-            UPPER(NVL(ip, ' ')) LIKE :q OR
-            UPPER(NVL(mac, ' ')) LIKE :q OR
-            UPPER(NVL(serial, ' ')) LIKE :q OR
-            UPPER(NVL(fabricante, ' ')) LIKE :q OR
-            UPPER(NVL(modelo, ' ')) LIKE :q OR
-            UPPER(NVL(ciudad, ' ')) LIKE :q OR
-            UPPER(NVL(localidad, ' ')) LIKE :q OR
-            UPPER(NVL(comentario, ' ')) LIKE :q OR
-            TO_CHAR(id) LIKE :q
+            UPPER(COALESCE(dispositivo, ' ')) LIKE :q OR
+            UPPER(COALESCE(ip, ' ')) LIKE :q OR
+            UPPER(COALESCE(mac, ' ')) LIKE :q OR
+            UPPER(COALESCE(serial, ' ')) LIKE :q OR
+            UPPER(COALESCE(fabricante, ' ')) LIKE :q OR
+            UPPER(COALESCE(modelo, ' ')) LIKE :q OR
+            UPPER(COALESCE(ciudad, ' ')) LIKE :q OR
+            UPPER(COALESCE(localidad, ' ')) LIKE :q OR
+            UPPER(COALESCE(comentario, ' ')) LIKE :q OR
+            CAST(id AS TEXT) LIKE :q
         )""")
         params["q"] = f"%{q.strip().upper()}%"
 
     # "No anunciado" tiene prioridad sobre la fecha del EOS.
-    generic = "INSTR(LOWER(NVL(comentario, ' ')), 'no anunciado') > 0"
+    generic = "POSITION('no anunciado' IN LOWER(COALESCE(comentario, ' '))) > 0"
     not_generic = f"NOT ({generic})"
     if eos == "generico":
         conditions.append(generic)
     elif eos == "vencido":
-        conditions.append(f"({not_generic} AND eos IS NOT NULL AND TRUNC(eos) < TRUNC(SYSDATE))")
+        conditions.append(f"({not_generic} AND eos IS NOT NULL AND eos < CURRENT_DATE)")
     elif eos == "vigente":
         # La fecha 2099-12-31 es un valor provisional, no un EOS real vigente.
-        conditions.append(f"({not_generic} AND eos IS NOT NULL AND TRUNC(eos) >= TRUNC(SYSDATE) AND TRUNC(eos) <> DATE '2099-12-31')")
+        conditions.append(f"({not_generic} AND eos IS NOT NULL AND eos >= CURRENT_DATE AND eos <> DATE '2099-12-31')")
 
     where_sql = " WHERE " + " AND ".join(conditions) if conditions else ""
     offset = (page - 1) * page_size
@@ -120,7 +122,7 @@ def get_inventory(
                 FROM {TABLE}
                 {where_sql}
                 ORDER BY id DESC
-                OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY
+                LIMIT :page_size OFFSET :offset
             """),
             {**params, "offset": offset, "page_size": page_size},
         ).mappings()
@@ -134,21 +136,21 @@ def get_inventory(
             },
         }
     except SQLAlchemyError as exc:
-        raise HTTPException(status_code=500, detail="No fue posible consultar el inventario de activos en Oracle.") from exc
+        raise HTTPException(status_code=500, detail="No fue posible consultar el inventario de activos.") from exc
 
 
 @router.patch("/inventory/{device_id}")
 def update_inventory_device(
     device_id: int,
     changes: dict[str, Any] = Body(...),
-    db: Session = Depends(get_oracle_db),
+    db: Session = Depends(get_assets_db),
     current: Usuario = Depends(get_current_user),
 ):
     """Actualiza exclusivamente los campos enviados de un activo existente.
 
     El enrutador /assets ya exige autenticación. Solo assets_admin puede
-    realizar cambios. El UPDATE sobre la tabla mantiene los triggers Oracle
-    de auditoría existentes; no se crean registros de historial duplicados.
+    realizar cambios. El historial lo registra el trigger PostgreSQL
+    trg_inventario_dispositivos_audit; no se insertan logs desde aquí.
     """
     if current.rol != "assets_admin":
         raise HTTPException(status_code=403, detail="Solo Assets Admin puede editar activos.")
@@ -165,6 +167,7 @@ def update_inventory_device(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
+        set_audit_context(db, current.username, "EDICION_WEB")
         current_row = db.execute(
             text(f"SELECT {SELECT_COLUMNS} FROM {TABLE} WHERE id = :device_id FOR UPDATE"),
             {"device_id": device_id},
@@ -219,4 +222,4 @@ def update_inventory_device(
         raise
     except SQLAlchemyError as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail="No se pudo actualizar el activo en Oracle.") from exc
+        raise HTTPException(status_code=500, detail="No se pudo actualizar el activo.") from exc
