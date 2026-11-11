@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield } from "lucide-react";
+import { Shield, UserX } from "lucide-react";
 import { loginUser, getCurrentUser } from "../services/authService";
 import { saveSession } from "../services/authSession";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -9,6 +9,8 @@ export default function Login() {
   const [params] = useSearchParams();
   const [form, setForm] = useState({ user: "", password: "" });
   const [error, setError] = useState("");
+  // Credenciales LDAP válidas pero cuenta no activa en SOX (HTTP 403).
+  const [inactiveNotice, setInactiveNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleChange = (event) => {
@@ -18,6 +20,7 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setInactiveNotice("");
     setLoading(true);
     try {
       const result = await loginUser(form.user.trim(), form.password);
@@ -32,7 +35,12 @@ export default function Login() {
         navigate("/modules", { replace: true });
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message || "No se pudo iniciar sesión");
+      const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 403 && typeof detail === "string") {
+        setInactiveNotice(detail);
+      } else {
+        setError(detail || err.message || "No se pudo iniciar sesión");
+      }
     } finally {
       setLoading(false);
     }
@@ -66,6 +74,16 @@ export default function Login() {
           <button disabled={loading} className="mt-8 h-12 w-full rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:opacity-60">{loading ? "Validando acceso..." : "Iniciar sesión"}</button>
         </form>
       </div>
+      {inactiveNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="inactive-title">
+          <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><UserX size={30} /></div>
+            <h3 id="inactive-title" className="mt-5 text-xl font-bold text-slate-950">Cuenta no activa en SOX</h3>
+            <p className="mt-3 text-slate-600">{inactiveNotice}</p>
+            <button type="button" autoFocus onClick={() => setInactiveNotice("")} className="mt-7 h-11 w-full rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700">Entendido</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

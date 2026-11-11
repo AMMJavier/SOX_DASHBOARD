@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from oracle_database import get_oracle_db
-from models import Usuario
+from models import Usuario, SoxSesion
 from schemas import CreateUserRequest, UsuarioAdminResponse, UsuarioEstadoRequest, ResetUserPasswordRequest
 from auth.dependencies import require_admin
 from auth.security import get_password_hash
@@ -78,6 +78,31 @@ def actualizar_estado(usuario_id: int, payload: UsuarioEstadoRequest,
         db.rollback()
         raise HTTPException(status_code=500, detail="No fue posible actualizar el usuario en Oracle") from exc
     return to_response(user)
+
+@router.delete("/{usuario_id}", status_code=204)
+def eliminar_usuario(usuario_id: int, db: Session = Depends(get_oracle_db),
+                     admin: Usuario = Depends(require_admin)):
+    """Elimina definitivamente la cuenta y sus sesiones.
+
+    Si otras tablas referencian al usuario (FK), Oracle rechaza el borrado y se
+    sugiere desactivarlo en su lugar para conservar la trazabilidad.
+    """
+    user = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    verificar_rol_objetivo(admin, user.rol)
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propia cuenta")
+    try:
+        db.query(SoxSesion).filter(SoxSesion.usuario_id == user.id).delete(synchronize_session=False)
+        db.delete(user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El usuario tiene registros asociados y no puede eliminarse; desactívalo en su lugar") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="No fue posible eliminar el usuario en Oracle") from exc
 
 @router.patch("/{usuario_id}/contrasena", status_code=204)
 def resetear_contrasena(usuario_id: int, payload: ResetUserPasswordRequest,

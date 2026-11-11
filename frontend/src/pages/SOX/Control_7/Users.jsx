@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createUser, getUserPermissions, listUsers, resetUserPassword, setUserActive, userApiError } from "../../../services/usersService";
+import { createUser, deleteUser, getUserPermissions, listUsers, resetUserPassword, setUserActive, userApiError } from "../../../services/usersService";
 
 const blank = { username: "", auth_provider: "ldap", rol: "", password: "" };
 
@@ -53,6 +53,17 @@ export default function Users() {
     } catch (err) { setError(userApiError(err)); }
   };
 
+  const handleDelete = async (usuario) => {
+    if (!window.confirm(`¿Eliminar definitivamente el usuario ${usuario.username}? Esta acción no se puede deshacer.`)) return;
+    setError(""); setNotice("");
+    try {
+      await deleteUser(usuario.id);
+      if (resetId === usuario.id) { setResetId(null); setNewPassword(""); }
+      setNotice(`Usuario ${usuario.username} eliminado.`);
+      await refresh();
+    } catch (err) { setError(userApiError(err)); }
+  };
+
   const handleReset = async (event) => {
     event.preventDefault();
     setError(""); setNotice(""); setSaving(true);
@@ -93,7 +104,7 @@ export default function Users() {
       <section className="overflow-x-auto rounded-2xl border bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-lg font-bold">{permisos.modulo === "global" ? "Usuarios de todos los módulos" : "Usuarios de Assets"} ({usuarios.length})</h2>
         <table className="min-w-full text-left text-sm"><thead><tr className="border-b text-slate-600"><th className="p-2">Usuario</th><th className="p-2">Proveedor</th><th className="p-2">Rol</th><th className="p-2">Estado</th><th className="p-2">Acciones</th></tr></thead>
-        <tbody>{usuarios.map((usuario) => <tr key={usuario.id} className="border-b"><td className="p-2">{usuario.username}</td><td className="p-2">{usuario.auth_provider}</td><td className="p-2">{usuario.rol}</td><td className="p-2">{usuario.activo ? "Activo" : "Inactivo"}</td><td className="space-x-3 p-2"><button type="button" className="text-blue-700 underline" onClick={() => handleActive(usuario)}>{usuario.activo ? "Desactivar" : "Activar"}</button>{usuario.auth_provider === "local" && <button type="button" onClick={() => { setResetId(usuario.id); setNewPassword(""); }} className="text-blue-700 underline">Restablecer contraseña</button>}</td></tr>)}</tbody>
+        <tbody>{usuarios.map((usuario) => <tr key={usuario.id} className="border-b"><td className="p-2">{usuario.username}</td><td className="p-2">{usuario.auth_provider}</td><td className="p-2">{usuario.rol}</td><td className="p-2">{usuario.activo ? "Activo" : "Inactivo"}</td><td className="space-x-3 p-2"><button type="button" className="text-blue-700 underline" onClick={() => handleActive(usuario)}>{usuario.activo ? "Desactivar" : "Activar"}</button>{usuario.auth_provider === "local" && <button type="button" onClick={() => { setResetId(usuario.id); setNewPassword(""); }} className="text-blue-700 underline">Restablecer contraseña</button>}<button type="button" onClick={() => handleDelete(usuario)} className="text-red-700 underline">Eliminar</button></td></tr>)}</tbody>
         </table>
         {!usuarios.length && <p className="mt-4 text-sm text-slate-600">No hay usuarios de este módulo.</p>}
       </section>

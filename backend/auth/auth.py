@@ -18,20 +18,33 @@ from jose import JWTError
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
+CREDENCIALES_INCORRECTAS = "Credenciales incorrectas"
+LDAP_SIN_ACCESO_SOX = (
+    "Tu usuario y contraseña LDAP son correctos, pero tu cuenta no está activa en el sistema SOX. "
+    "Solicita la activación al administrador."
+)
+
 @router.post("/login", response_model=TokenResponse)
 def login(credentials: LoginRequest, db: Session = Depends(get_oracle_db)):
     username = credentials.username.strip().lower()
     user = db.query(Usuario).filter(func.lower(Usuario.username) == username, Usuario.activo == 1).first()
-    # Respuesta uniforme: evita enumerar usuarios y cuentas desactivadas.
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales incorrectas")
+        # Cuenta inexistente o inactiva en SOX. Si es LDAP y las credenciales del
+        # directorio son válidas, se informa que falta activarla: así se distingue
+        # un problema de alta en SOX de un error de clave o de conexión con LDAP.
+        # Solo quien ya conoce la clave corporativa correcta recibe este mensaje.
+        registrado = db.query(Usuario).filter(func.lower(Usuario.username) == username).first()
+        es_ldap = registrado is None or registrado.auth_provider == "ldap"
+        if es_ldap and authenticate_ldap(username, credentials.password):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=LDAP_SIN_ACCESO_SOX)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=CREDENCIALES_INCORRECTAS)
     authenticated = False
     if user.auth_provider == "local":
         authenticated = verify_password(credentials.password, user.password_hash)
     elif user.auth_provider == "ldap":
         authenticated = authenticate_ldap(user.username, credentials.password)
     if not authenticated:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales incorrectas")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=CREDENCIALES_INCORRECTAS)
     try:
         session_id = create_session(db, user.id)
     except Exception:

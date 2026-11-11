@@ -20,6 +20,10 @@ export async function setUserActive(id, activo) {
   return data;
 }
 
+export async function deleteUser(id) {
+  await api.delete(`/usuarios/${id}`);
+}
+
 export async function resetUserPassword(id, password_nueva) {
   await api.patch(`/usuarios/${id}/contrasena`, { password_nueva });
 }
