@@ -161,7 +161,7 @@ export default function AssetsUpload() {
     );
 
     const accepted = window.confirm(
-      `¿Confirmas la importación de ${items.length} dispositivos en Oracle?`
+      `¿Confirmas la importación de ${items.length} dispositivos en Postgres?`
     );
 
     if (!accepted) return;
@@ -256,7 +256,7 @@ export default function AssetsUpload() {
     );
 
     const accepted = window.confirm(
-      `¿Deseas guardar ${items.length} dispositivos en Oracle?`
+      `¿Deseas guardar ${items.length} dispositivos en Postgres?`
     );
 
     if (!accepted) return;
@@ -632,7 +632,7 @@ export default function AssetsUpload() {
                   ) : (
                     <Database className="h-4 w-4" />
                   )}
-                  Confirmar carga en Oracle
+                  Confirmar carga en Postgres
                 </button>
               </div>
 

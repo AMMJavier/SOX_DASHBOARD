@@ -47,7 +47,11 @@ LOG_FIELDS = """
 
 def _filters(search=None, campo=None, serial=None, operacion=None,
              fecha_inicio=None, fecha_fin=None, device_id=None):
-    conditions = [REAL_CHANGE]
+    # El historial de modificaciones excluye altas iniciales. Las operaciones
+    # UPDATE (y DELETE, como baja auditable) siguen disponibles.
+    # Se conserva el INSERT en la tabla de auditoria para trazabilidad,
+    # pero nunca se cuenta como una modificacion del equipo.
+    conditions = ["UPPER(TRIM(l.OPERACION)) IN ('UPDATE', 'DELETE')", REAL_CHANGE]
     params = {}
 
     if search and search.strip():

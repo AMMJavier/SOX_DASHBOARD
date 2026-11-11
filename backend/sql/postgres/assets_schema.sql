@@ -7,8 +7,7 @@
 --  Es idempotente: puede volver a ejecutarse sin perder datos.
 -- =====================================================================
 
-CREATE SCHEMA IF NOT EXISTS autom;
-SET search_path TO autom, public;
+SET search_path TO public;
 
 -- ---------------------------------------------------------------------
 -- Inventario
