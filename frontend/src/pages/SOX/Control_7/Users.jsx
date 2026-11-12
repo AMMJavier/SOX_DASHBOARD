@@ -5,6 +5,7 @@ import {
 import {
   createUser, deleteUser, getUserPermissions, listUsers, resetUserPassword, setUserActive, userApiError,
 } from "../../../services/usersService";
+import PasswordGenerator from "../../../components/common/PasswordGenerator";
 
 /*
  * Administración de usuarios compartida por SOX (/SOX/Controls/Control_7/users)
@@ -207,6 +208,11 @@ export default function Users() {
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className={input} />
               </label>
             )}
+            {form.auth_provider === "local" && (
+              <div className="md:col-span-2">
+                <PasswordGenerator onUse={(clave) => setForm((f) => ({ ...f, password: clave }))} />
+              </div>
+            )}
           </div>
           <div className="mt-5">
             <button disabled={saving} className={`inline-flex h-11 items-center gap-2 rounded-xl px-5 font-semibold text-white disabled:opacity-50 ${accent.btn}`}>
@@ -284,8 +290,9 @@ export default function Users() {
       {resetUser && (
         <Modal title={`Restablecer contraseña de ${resetUser.username}`} onClose={() => { setResetUser(null); setNewPassword(""); }}>
           <form onSubmit={handleReset}>
-            <label className="block text-sm font-semibold text-slate-700">Nueva contraseña (8–72 caracteres)
-              <input required autoFocus type="password" autoComplete="new-password" minLength={8} value={newPassword}
+            <PasswordGenerator onUse={setNewPassword} />
+            <label className="mt-4 block text-sm font-semibold text-slate-700">Nueva contraseña (8–72 caracteres)
+              <input required type="password" autoComplete="new-password" minLength={8} value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)} className={input} />
             </label>
             <div className="mt-6 flex justify-end gap-3">
