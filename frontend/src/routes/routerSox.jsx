@@ -1,4 +1,4 @@
-import { Route } from "react-router-dom";
+import { Navigate, Route } from "react-router-dom";
 
 import PrivateRoute from "./PrivateRoute";
 import SoxLayout from "../layouts/SoxLayout";
@@ -45,8 +45,9 @@ function ProtectedSoxLayout({ roles = STANDARD_ROLES }) {
 
 export const soxRoutes = (
   <>
-    <Route path="/admin/users" element={<PrivateRoute allowedRoles={["administrador"]}><Users /></PrivateRoute>} />
-    <Route path="/admin/settings" element={<PrivateRoute allowedRoles={["administrador"]}><Settings /></PrivateRoute>} />
+    {/* Rutas antiguas: ahora viven dentro del layout del Control 7 (con sidebar). */}
+    <Route path="/admin/users" element={<Navigate to="/SOX/Controls/Control_7/users" replace />} />
+    <Route path="/admin/settings" element={<Navigate to="/SOX/Controls/Control_7/settings" replace />} />
 
     {/* CONTROL 1 */}
     <Route
@@ -193,6 +194,11 @@ export const soxRoutes = (
       <Route
         path="settings"
         element={<PrivateRoute allowedRoles={["administrador"]}><Settings /></PrivateRoute>}
+      />
+
+      <Route
+        path="users"
+        element={<PrivateRoute allowedRoles={["administrador"]}><Users /></PrivateRoute>}
       />
     </Route>
 

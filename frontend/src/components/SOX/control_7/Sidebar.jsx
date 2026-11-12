@@ -1,4 +1,4 @@
-import { Database, Download, FileText, Settings, Users } from "lucide-react";
+import { Database, Download, FileText, ScrollText, Settings, UserCog } from "lucide-react";
 import SidebarItem from "../layout/SidebarItem";
 
 /** Opciones exclusivas del Control 7. No dibuja un segundo <aside>. */
@@ -17,9 +17,9 @@ export default function Sidebar({ role, pathname }) {
       {item("/SOX/Controls/Control_7/history", FileText, "Histórico")}
       {item("/SOX/Controls/Control_7/reports", Download, "Exportaciones")}
       <p className="px-2 pb-1 pt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Administración</p>
-      {item("/SOX/Controls/Control_7/logs", Users, "Logs")}
-      {role === "administrador" && item("/admin/users", Users, "Usuarios")}
-      {role === "administrador" && item("/admin/settings", Settings, "Configuración")}
+      {item("/SOX/Controls/Control_7/logs", ScrollText, "Logs")}
+      {role === "administrador" && item("/SOX/Controls/Control_7/users", UserCog, "Usuarios")}
+      {role === "administrador" && item("/SOX/Controls/Control_7/settings", Settings, "Configuración")}
     </>
   );
 }

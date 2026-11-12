@@ -82,11 +82,14 @@ def actualizar_estado(usuario_id: int, payload: UsuarioEstadoRequest,
 @router.delete("/{usuario_id}", status_code=204)
 def eliminar_usuario(usuario_id: int, db: Session = Depends(get_oracle_db),
                      admin: Usuario = Depends(require_admin)):
-    """Elimina definitivamente la cuenta y sus sesiones.
+    """Elimina definitivamente la cuenta y sus sesiones. Solo administrador SOX.
 
+    El administrador de Assets únicamente puede activar/desactivar.
     Si otras tablas referencian al usuario (FK), Oracle rechaza el borrado y se
     sugiere desactivarlo en su lugar para conservar la trazabilidad.
     """
+    if admin.rol != "administrador":
+        raise HTTPException(status_code=403, detail="Solo el administrador SOX puede eliminar usuarios; desactívalo en su lugar")
     user = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
