@@ -118,7 +118,10 @@ def resetear_contrasena(usuario_id: int, payload: ResetUserPasswordRequest,
         raise HTTPException(status_code=400, detail="La contraseña LDAP sólo puede gestionarse en el directorio")
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="Use /auth/cambiar-contrasena para su cuenta")
-    user.password_hash = get_password_hash(payload.password_nueva)
+    try:
+        user.password_hash = get_password_hash(payload.password_nueva)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     user.actualizado_en = _now()
     try:
         db.commit()

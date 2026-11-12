@@ -105,4 +105,5 @@ class UsuarioEstadoRequest(BaseModel):
     activo: bool
 
 class ResetUserPasswordRequest(BaseModel):
-    nueva_password: str = Field(min_length=8)
+    # Mismo nombre que envía el frontend (usersService.resetUserPassword) y que lee auth/users.py.
+    password_nueva: str = Field(min_length=8)
