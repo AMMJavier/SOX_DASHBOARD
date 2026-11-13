@@ -10,6 +10,8 @@ import ControlMailPanel from "./ControlMailPanel";
 
 // Controles con correo formal + archivado automático.
 const MAIL_CONTROLS = [1, 2, 3];
+// Controles con botón "Enviar notificación" en la vista Evidencias (correos.json > controles.<n>.notificacion).
+const NOTIFY_CONTROLS = [1];
 // Tipo de evidencia propuesto para el correo enviado (el usuario puede cambiarlo).
 const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
 
@@ -227,6 +229,10 @@ export default function ControlWorkspace({ config }) {
         </div>
       </Panel>}
       {feedback && <InfoBanner caution>{feedback}</InfoBanner>}
+      {NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
+        title={`Enviar notificación del Control ${config.number}`}
+        description="Notificación a los responsables del control. Destinatarios, copias y texto se configuran en backend/config/correos.json; revisa la vista previa antes de enviar."
+        sendLabel="Enviar notificación" hideIfNotAdmin />}
       {MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
         evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
         repositoryFiles={[
