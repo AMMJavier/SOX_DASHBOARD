@@ -408,8 +408,16 @@ def preview_one(db, campaign, key, item):
     state, _ = _notification_state(_for_current_email(all_attempts, emails))
     if not _can_send(state):
         return None
-    # El número de intento cuenta TODOS los envíos del gerente: la clave de idempotencia no se repite.
-    return {"correo": emails, "intento": len(all_attempts) + 1}
+    # El número de intento cuenta TODOS los registros del gerente en la campaña (pruebas y reales):
+    # así la clave de idempotencia C7-<campaña>-<gerente>-<intento> nunca choca con una anterior.
+    return {"correo": emails, "intento": _attempts_total(db, campaign["id"], key) + 1}
+
+
+def _attempts_total(db, campaign_id, key):
+    return int(db.execute(text("""
+        SELECT COUNT(*) FROM AUTOM.SOX_MAIL_OUTBOX
+         WHERE ORIGEN = 'CAMPANA' AND ID_CAMPANA = :p_camp AND GERENTE_KEY = :p_key
+    """), {"p_camp": campaign_id, "p_key": key[:200]}).scalar() or 0)
 
 
 def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None):
@@ -440,8 +448,10 @@ def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None)
         value = result.out_parameters["p_returned"]
         outbox_id = int(value[0] if isinstance(value, (tuple, list)) else value)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()  # Otro proceso ya registró este intento: no se envía de nuevo.
+        mail.console(f"AVISO C7 NO REGISTRADO | gerente={item['gerente']!r} clave={idem}: Oracle rechazó el "
+                     f"registro en SOX_MAIL_OUTBOX (clave repetida o restricción): {str(exc.orig if hasattr(exc, 'orig') else exc)[:300]}")
         return False
 
     footer = f"\n\n--\nEnviado desde SOX Dashboard por {username}. Referencia SOX: C7-{outbox_id}."
@@ -455,6 +465,7 @@ def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None)
                         "Graph no respondió a tiempo. Verificar en Elementos enviados antes de reenviar.")
         return False
     except HTTPException as exc:
+        mail.console(f"AVISO C7 #{outbox_id} NO ENVIADO | gerente={item['gerente']!r}: {exc.detail}")
         mail._set_state(db, outbox_id, "FALLIDO", f"No se envió: {exc.detail}")
         return False
     if code != 0 or not out.get("ok"):
