@@ -1,0 +1,155 @@
+{
+  "_leeme": [
+    "Configuración central de correos SOX. Copiar a backend/config/correos.json y completar.",
+    "Se relee sola al guardar: no hace falta reiniciar la API.",
+    "Todo destinatario o copia debe pertenecer a un dominio de 'dominios_permitidos'.",
+    "Los cuerpos pueden escribirse como lista de líneas. Las {variables} se reemplazan al enviar.",
+    "Lo que no esté aquí se toma del .env (SOX_MAIL_SENDER, SOX_MAIL_ALLOWED_DOMAINS, SOX_REMINDER_TO_n)."
+  ],
+
+  "remitente": "buzon.autorizado@empresa.com",
+  "dominios_permitidos": ["empresa.com", "otra-empresa.com"],
+
+  "_copias_generales": "Se agregan en CC a TODOS los correos SOX (correo formal, notificaciones y avisos del Control 7).",
+  "copias_generales": [],
+
+  "controles": {
+    "1": {
+      "copias": [],
+      "notificacion": {
+        "_variables": "{anio} {periodo} {referencia} {referencia_linea}",
+        "destinatarios": ["responsable@empresa.com"],
+        "asunto": "SOX Control 1 - Evidencia anual del procedimiento SIS016 | {anio}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "Se solicita revisar la vigencia del procedimiento SIS016 y conservar los correos de solicitud/actualización y aprobación de Gerencia, o el correo que confirme que no hubo cambios. El control se cierra anualmente; pueden existir varias versiones.",
+          "",
+          "Período: {periodo}{referencia_linea}",
+          "",
+          "Este mensaje es una notificación operativa; no constituye aprobación formal. Los documentos de respaldo se consultan en el repositorio privado SOX.",
+          "",
+          "Saludos."
+        ]
+      }
+    },
+    "2": {
+      "copias": [],
+      "notificacion": {
+        "destinatarios": [],
+        "asunto": "SOX Control 2 - Plan de Seguridad anual | {anio}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "Se solicita elaborar o revisar el Plan de Seguridad anual de firewalls, gestionar su aprobación por Gerencia y cargar el plan y el correo de aprobación en el expediente anual.",
+          "",
+          "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      }
+    },
+    "3": {
+      "copias": [],
+      "notificacion": {
+        "_variables": "{anio} {semestre} {periodo} {referencia_linea}",
+        "destinatarios": [],
+        "asunto": "SOX Control 3 - Seguimiento semestral del Plan de Seguridad | {anio} | S{semestre}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "Se solicita realizar la revisión semestral del avance del plan aprobado en Control 2, documentar la reunión y cargar el correo o respaldo de la aprobación de Jefatura.",
+          "",
+          "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      }
+    },
+    "5": {
+      "copias": [],
+      "notificacion": {
+        "destinatarios": [],
+        "asunto": "SOX Control 5 - Evidencias de cambios de administradores firewall | {anio}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "Se recuerda registrar cada alta, modificación o baja de administradores como un evento independiente con su autorización y evidencia de ejecución.",
+          "",
+          "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      },
+      "correo_formal": {
+        "_variables": "{operacion} {cuenta} {perfil} {fecha} {ticket} {ticket_asunto} {linea_observaciones}",
+        "asunto": "SOX Control 5 · {operacion} de administrador firewall: {cuenta}{ticket_asunto}",
+        "cuerpo": [
+          "Estimado(a):",
+          "",
+          "Se solicita su autorización para el siguiente cambio en cuentas administradoras de firewall:",
+          "",
+          "- Operación: {operacion}",
+          "- Cuenta: {cuenta}",
+          "- Grupo / perfil: {perfil}",
+          "- Fecha del evento: {fecha}",
+          "- Ticket / referencia: {ticket}{linea_observaciones}",
+          "",
+          "Quedo atento a su aprobación.",
+          "",
+          "Saludos."
+        ]
+      }
+    },
+    "6": {
+      "copias": [],
+      "notificacion": {
+        "destinatarios": [],
+        "asunto": "SOX Control 6 - Conciliación de cesantes y accesos VPN internos | {anio} | S{semestre}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "Se solicita conciliar la fuente autorizada de RR. HH. con los listados internos LDAP/RDP/aplicaciones y SASE. Los hallazgos requieren verificación antes de realizar bajas.",
+          "",
+          "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      }
+    },
+    "7": {
+      "copias": [],
+      "aviso_gerentes": {
+        "_variables": "{gerente} {campana} {periodo} {cantidad_vpn} {fecha_limite} {linea_portal} {portal} {tabla_vpn}",
+        "modo_prueba": {
+          "_info": "Con activo=true los avisos NO van a los gerentes: van a estos destinatarios con asunto [PRUEBA].",
+          "activo": true,
+          "destinatarios": ["prueba@empresa.com"],
+          "nota": [
+            "*** CORREO DE PRUEBA ***",
+            "Este aviso corresponde al gerente: {gerente}.",
+            "No se envió al gerente: el sistema está en modo prueba con destinatarios fijos.",
+            "",
+            ""
+          ]
+        },
+        "asunto": "SOX Control 7 - Inicio de validación de accesos VPN | {periodo} | Fecha límite {fecha_limite}",
+        "cuerpo": [
+          "Estimado(a) {gerente}:",
+          "",
+          "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN (comunidades administradas en Check Point).",
+          "",
+          "- Período: {periodo}",
+          "- Accesos VPN asociados a usted: {cantidad_vpn}",
+          "- Fecha límite de validación: {fecha_limite}",
+          "",
+          "{linea_portal} para revisar cada acceso e indicar si debe mantenerse o eliminarse, agregando observaciones cuando corresponda.",
+          "",
+          "Este correo es una notificación de apertura. La validación solo queda registrada cuando usted la confirma en el portal.",
+          "",
+          "{tabla_vpn}Saludos."
+        ]
+      }
+    }
+  }
+}

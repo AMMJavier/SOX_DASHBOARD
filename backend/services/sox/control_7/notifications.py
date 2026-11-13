@@ -22,6 +22,7 @@ from fastapi import HTTPException
 from sqlalchemy import Integer, outparam, text
 from sqlalchemy.exc import IntegrityError
 
+from services.sox.common import mail_config
 from services.sox.common import mail_service as mail
 
 logger = logging.getLogger(__name__)
@@ -30,25 +31,24 @@ _batch_lock = threading.Lock()
 READY, NO_CONTACT, AMBIGUOUS, DOMAIN = "LISTO", "SIN_CONTACTO", "AMBIGUO", "DOMINIO_NO_PERMITIDO"
 
 # ---------------------------------------------------------------- MODO PRUEBA
-# Mientras esta lista tenga correos, los avisos NO usan AUTOM.SOX_GERENTES_CONTACTO:
-# el aviso de cada gerente se envía a estas direcciones, con asunto [PRUEBA] y una
-# nota indicando a qué gerente correspondía. Para usar los correos reales de Oracle,
-# dejar la lista vacía:  CORREOS_FIJOS = []
-CORREOS_FIJOS = [
-    "dmedinac@claro.com.ec",
-    "galvaram@claro.com.ec",
-    "mirandaalj@hitss.com",
-]
+# Se configura en backend/config/correos.json > controles.7.aviso_gerentes.modo_prueba.
+# Con "activo": true y destinatarios, los avisos NO usan AUTOM.SOX_GERENTES_CONTACTO:
+# el aviso de cada gerente se envía a esas direcciones con asunto [PRUEBA] y una nota.
+# Para usar los correos reales de Oracle: "activo": false.
 
 
 def modo_prueba():
-    return bool(CORREOS_FIJOS)
+    return mail_config.c7_notice()["modo_prueba"]
+
+
+def correos_prueba():
+    return mail_config.c7_notice()["destinatarios_prueba"] if modo_prueba() else []
 
 
 def _resolve_contact(contacts, key):
     """Devuelve (estado_contacto, lista_de_correos) para un gerente."""
     if modo_prueba():
-        emails = list(CORREOS_FIJOS)
+        emails = correos_prueba()
     else:
         found = list(contacts.get(key, {}).values())
         if not found:
@@ -228,34 +228,51 @@ def preview(db):
     }
     return {"campana": {k: _fmt(v) for k, v in campaign.items()}, "gerentes": items, "resumen": summary,
             "envio_habilitado": mail._env_bool("SOX_MAIL_ENABLED"), "en_proceso": batch_running(),
-            "modo_prueba": modo_prueba(), "correos_prueba": list(CORREOS_FIJOS)}
+            "modo_prueba": modo_prueba(), "correos_prueba": correos_prueba(),
+            "copias": mail_config.cc(7)}
 
 
 # ---------------------------------------------------------------- mensaje
 
+DEFAULT_SUBJECT = "SOX Control 7 - Inicio de validación de accesos VPN | {periodo} | Fecha límite {fecha_limite}"
+DEFAULT_BODY = (
+    "Estimado(a) {gerente}:\n\n"
+    "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN "
+    "(comunidades administradas en Check Point).\n\n"
+    "- Período: {periodo}\n"
+    "- Accesos VPN asociados a usted: {cantidad_vpn}\n"
+    "- Fecha límite de validación: {fecha_limite}\n\n"
+    "{linea_portal} para revisar cada acceso e indicar si debe mantenerse o eliminarse, "
+    "agregando observaciones cuando corresponda.\n\n"
+    "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
+    "usted la confirma en el portal.\n\n"
+    "{tabla_vpn}"
+    "Saludos."
+)
+DEFAULT_TEST_NOTE = ("*** CORREO DE PRUEBA ***\nEste aviso corresponde al gerente: {gerente}.\n"
+                     "No se envió al gerente: el sistema está en modo prueba con destinatarios fijos.\n\n")
+
+
 def compose(campaign, manager_name, vpn_count, vpns=None):
+    """Asunto y cuerpo del aviso; los textos salen de correos.json > controles.7.aviso_gerentes."""
+    config = mail_config.c7_notice()
     deadline = campaign["fecha_limite"]
     deadline_txt = deadline.strftime("%d/%m/%Y") if isinstance(deadline, datetime) else str(deadline or "por confirmar")
     period = f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre"
     portal = os.getenv("SOX_PORTAL_URL", "").strip()
-    portal_line = f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal.startswith("https://") \
-        else "Ingrese al portal SOX con su cuenta corporativa"
-    subject = f"SOX Control 7 - Inicio de validación de accesos VPN | {period} | Fecha límite {deadline_txt}"
-    body = (
-        f"Estimado(a) {manager_name}:\n\n"
-        f"Se ha iniciado la campaña \"{campaign['nombre']}\" de validación semestral de accesos VPN "
-        f"(comunidades administradas en Check Point).\n\n"
-        f"- Período: {period}\n"
-        f"- Accesos VPN asociados a usted: {vpn_count}\n"
-        f"- Fecha límite de validación: {deadline_txt}\n\n"
-        f"{portal_line} para revisar cada acceso e indicar si debe mantenerse o eliminarse, "
-        f"agregando observaciones cuando corresponda.\n\n"
-        "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
-        "usted la confirma en el portal.\n\n"
-        + (f"Sus VPN ({len(vpns)}):\n\n{_vpn_table(vpns)}\n\n" if vpns else "")
-        + "Saludos."
-    )
-    return subject[:200], body
+    values = {
+        "gerente": manager_name, "campana": campaign["nombre"], "periodo": period,
+        "cantidad_vpn": vpn_count, "fecha_limite": deadline_txt, "portal": portal,
+        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal.startswith("https://")
+                         else "Ingrese al portal SOX con su cuenta corporativa"),
+        "tabla_vpn": f"Sus VPN ({len(vpns)}):\n\n{_vpn_table(vpns)}\n\n" if vpns else "",
+    }
+    subject = mail_config.render(config["asunto"] or DEFAULT_SUBJECT, **values)
+    body = mail_config.render(config["cuerpo"] or DEFAULT_BODY, **values)
+    if modo_prueba():
+        subject = f"[PRUEBA] {subject}"
+        body = mail_config.render(config["nota_prueba"] or DEFAULT_TEST_NOTE, **values) + body
+    return " ".join(subject.split())[:200], body
 
 
 # ---------------------------------------------------------------- envío
@@ -270,9 +287,9 @@ def _check_ready(db, user, confirmar):
     if 7 not in mail.enabled_controls():
         raise HTTPException(503, "Las notificaciones del Control 7 no están habilitadas (SOX_MAIL_CONTROLS)")
     if not mail.sender():
-        raise HTTPException(503, "SOX_MAIL_SENDER no está configurado")
+        raise HTTPException(503, "No hay remitente válido (correos.json > remitente)")
     if not mail.allowed_domains():
-        raise HTTPException(503, "SOX_MAIL_ALLOWED_DOMAINS no está configurado; envío bloqueado")
+        raise HTTPException(503, "No hay dominios permitidos (correos.json > dominios_permitidos); envío bloqueado")
     mail._graph_paths()  # Falla aquí, antes de encolar, si la integración no está instalada
     campaign = active_campaign(db)
     if not campaign:
@@ -345,10 +362,8 @@ def preview_one(db, campaign, key, item):
 
 def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None):
     subject, body = compose(campaign, item["gerente"], item["vpn"], vpns)
-    if modo_prueba():
-        subject = f"[PRUEBA] {subject}"[:200]
-        body = (f"*** CORREO DE PRUEBA ***\nEste aviso corresponde al gerente: {item['gerente']}.\n"
-                f"No se envió al gerente: el sistema está en modo prueba con destinatarios fijos.\n\n{body}")
+    taken = {x.casefold() for x in emails}
+    copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     email = ", ".join(emails)
     correlation = uuid4().hex
     idem = f"C7-{campaign['id']}-{_key_hash(item['key'])}-{attempt}"
@@ -356,15 +371,16 @@ def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None)
         result = db.execute(text("""
             INSERT INTO AUTOM.SOX_MAIL_OUTBOX
               (CONTROL_NUMERO, ANIO, SEMESTRE, TIPO_EVIDENCIA, ORIGEN, IDEMPOTENCY_KEY, CORRELACION,
-               EMISOR, DESTINATARIOS, ASUNTO, CUERPO, ESTADO, SOLICITADO_POR, FECHA_SOLICITUD,
+               EMISOR, DESTINATARIOS, CC, ASUNTO, CUERPO, ESTADO, SOLICITADO_POR, FECHA_SOLICITUD,
                ID_CAMPANA, GERENTE, GERENTE_KEY)
             VALUES (7, :p_anio, :p_sem, 'notificacion', 'CAMPANA', :p_idem, :p_corr,
-                    :p_emisor, :p_para, :p_asunto, :p_cuerpo, 'PENDIENTE', :p_user, :p_fecha,
+                    :p_emisor, :p_para, :p_cc, :p_asunto, :p_cuerpo, 'PENDIENTE', :p_user, :p_fecha,
                     :p_camp, :p_gerente, :p_key)
             RETURNING ID INTO :p_returned
         """).bindparams(outparam("p_returned", Integer)), {
             "p_anio": campaign["anio"], "p_sem": campaign["semestre"], "p_idem": idem, "p_corr": correlation,
-            "p_emisor": mail.sender(), "p_para": email, "p_asunto": subject, "p_cuerpo": body,
+            "p_emisor": mail.sender(), "p_para": email, "p_cc": "; ".join(copies) or None,
+            "p_asunto": subject, "p_cuerpo": body,
             "p_user": user_id, "p_fecha": mail._now(), "p_camp": campaign["id"],
             "p_gerente": item["gerente"][:200], "p_key": item["key"][:200]})
         value = result.out_parameters["p_returned"]
@@ -377,7 +393,7 @@ def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None)
     footer = f"\n\n--\nEnviado desde SOX Dashboard por {username}. Referencia SOX: C7-{outbox_id}."
     try:
         code, out = mail._run_worker("enviar", {
-            "emisor": mail.sender(), "destinatarios": list(emails), "cc": [], "asunto": subject,
+            "emisor": mail.sender(), "destinatarios": list(emails), "cc": copies, "asunto": subject,
             "cuerpo": body + footer, "formato": "texto", "correlacion": correlation, "adjuntos": [],
         }, timeout=120)
     except subprocess.TimeoutExpired:

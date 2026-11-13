@@ -82,7 +82,8 @@ export default function CampaignNotifications() {
         </div>
       </div>
 
-      {data?.modo_prueba && <p className="mb-4 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800"><strong>Modo prueba:</strong> los avisos no se envían a los gerentes ni se usan los correos de Oracle. Cada aviso llega a {data.correos_prueba.join(" y ")} con asunto [PRUEBA] e indica a qué gerente correspondía.</p>}
+      {data?.modo_prueba && <p className="mb-4 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800"><strong>Modo prueba:</strong> los avisos no se envían a los gerentes ni se usan los correos de Oracle. Cada aviso llega a {data.correos_prueba.join(", ")} con asunto [PRUEBA] e indica a qué gerente correspondía. Se cambia en backend/config/correos.json (controles.7.aviso_gerentes.modo_prueba).</p>}
+      {data?.copias?.length > 0 && <p className="mb-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><strong>Copia automática:</strong> {data.copias.join(", ")}</p>}
       {data && !data.envio_habilitado && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">El envío está desactivado en el servidor (SOX_MAIL_ENABLED). La vista previa sí está disponible.</p>}
       {message && <p className={`mb-4 rounded-lg p-3 text-sm ${message.error ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-800"}`}>{message.text}</p>}
 

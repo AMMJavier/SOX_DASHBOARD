@@ -14,6 +14,9 @@ const STATUS = {
 
 const emptyDraft = (defaultType, asunto = "", cuerpo = "") => ({ para: "", cc: "", asunto, cuerpo, tipo: defaultType });
 
+// Plantillas de backend/config/correos.json: reemplaza {variable}; las desconocidas quedan igual.
+const renderTemplate = (text, vars) => String(text || "").replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key] ?? "") : match));
+
 /**
  * Correo formal a Gerencia/Jefatura enviado desde SOX por el buzón corporativo.
  * Tras el envío, la copia de Elementos enviados se guarda como evidencia (EML + PDF).
@@ -21,13 +24,19 @@ const emptyDraft = (defaultType, asunto = "", cuerpo = "") => ({ para: "", cc: "
  */
 export default function ControlMailPanel({
   control, year, semester = null, evidenceTypes, defaultType, canWrite, onArchived, repositoryFiles = [],
-  eventId = null, defaultSubject = "", defaultBody = "",
+  eventId = null, defaultSubject = "", defaultBody = "", templateVars = null,
   title = "Enviar correo formal",
   description = "Solicitud de revisión o aprobación a Gerencia/Jefatura desde el buzón corporativo. La copia enviada se guarda automáticamente como evidencia.",
 }) {
   const [config, setConfig] = useState(null);
   const [configError, setConfigError] = useState("");
-  const initialDraft = () => emptyDraft(defaultType || evidenceTypes[0]?.key, defaultSubject, defaultBody);
+  // Si correos.json define "correo_formal" para el control y hay variables, el borrador usa esa plantilla.
+  const draftTexts = (cfg) => {
+    const tpl = cfg?.plantilla_borrador;
+    if (!tpl || !templateVars) return { asunto: defaultSubject, cuerpo: defaultBody };
+    return { asunto: renderTemplate(tpl.asunto, templateVars).slice(0, 200), cuerpo: renderTemplate(tpl.cuerpo, templateVars) };
+  };
+  const initialDraft = (cfg = config) => ({ ...emptyDraft(defaultType || evidenceTypes[0]?.key), ...draftTexts(cfg) });
   const [draft, setDraft] = useState(initialDraft);
   const [files, setFiles] = useState([]);
   const [repoSelected, setRepoSelected] = useState([]);
@@ -40,7 +49,11 @@ export default function ControlMailPanel({
 
   useEffect(() => {
     if (!canWrite) return;
-    getMailConfig(control).then(setConfig).catch((e) => setConfigError(e.message));
+    getMailConfig(control).then((cfg) => {
+      setConfig(cfg);
+      // Aplica la plantilla solo si el usuario todavía no modificó el borrador.
+      setDraft((d) => (d.asunto === defaultSubject && d.cuerpo === defaultBody ? { ...d, ...draftTexts(cfg) } : d));
+    }).catch((e) => setConfigError(e.message));
   }, [control, canWrite]);
 
   useEffect(() => {
@@ -78,7 +91,8 @@ export default function ControlMailPanel({
   };
 
   async function handleSend() {
-    const summary = `Se enviará un correo REAL desde ${config.emisor}\n\nPara: ${draft.para}${draft.cc ? `\nCC: ${draft.cc}` : ""}\nAsunto: ${draft.asunto}\nAdjuntos: ${totalCount}\n\nLuego se archivará como evidencia del Control ${control}. ¿Confirmas el envío?`;
+    const fixedCc = config.copias_fijas?.length ? `\nCopia automática: ${config.copias_fijas.join("; ")}` : "";
+    const summary = `Se enviará un correo REAL desde ${config.emisor}\n\nPara: ${draft.para}${draft.cc ? `\nCC: ${draft.cc}` : ""}${fixedCc}\nAsunto: ${draft.asunto}\nAdjuntos: ${totalCount}\n\nLuego se archivará como evidencia del Control ${control}. ¿Confirmas el envío?`;
     if (!window.confirm(summary)) return;
     setBusy(true);
     setFeedback(null);
@@ -146,7 +160,8 @@ export default function ControlMailPanel({
           placeholder="Describe la revisión o los cambios realizados y la solicitud a Gerencia."/>
       </label>
       <p className="mt-1 text-xs text-slate-500">Al final del mensaje se agrega automáticamente quién lo envió desde SOX y su referencia.
-        {config?.dominios_permitidos?.length ? ` Dominios permitidos: ${config.dominios_permitidos.join(", ")}.` : ""}</p>
+        {config?.dominios_permitidos?.length ? ` Dominios permitidos: ${config.dominios_permitidos.join(", ")}.` : ""}
+        {config?.copias_fijas?.length ? ` Copia automática (correos.json): ${config.copias_fijas.join(", ")}.` : ""}</p>
       {repositoryFiles.length > 0 && <fieldset className="mt-4">
         <legend className="text-xs font-semibold text-slate-600">Adjuntar desde el repositorio (sin volver a subir el archivo)</legend>
         <ul className="mt-2 space-y-2">{repositoryFiles.map((f) => <li key={f.id}>

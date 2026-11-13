@@ -36,6 +36,20 @@ function eventMailDraft(event) {
   return { subject: subject.slice(0, 200), body };
 }
 
+// Variables para la plantilla correos.json > controles.5.correo_formal (si existe; si no, se usa eventMailDraft).
+function eventTemplateVars(event) {
+  return {
+    operacion: OPERATION_LABEL[event.operacion] || event.operacion,
+    cuenta: event.cuenta,
+    perfil: event.perfil || "No especificado",
+    fecha: String(event.fecha_evento).slice(0, 10),
+    ticket: event.ticket || "No especificado",
+    ticket_asunto: event.ticket ? ` · ${event.ticket}` : "",
+    observaciones: event.descripcion || "",
+    linea_observaciones: event.descripcion ? `\n- Observaciones: ${event.descripcion}` : "",
+  };
+}
+
 const TYPES = [
   ["aprobacion", "Correo de aprobación de Jefatura"],
   ["ejecucion", "Evidencia de cambio ejecutado"],
@@ -186,6 +200,7 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
       description="Solicita la autorización o informa la modificación desde el buzón corporativo. La copia enviada queda en el expediente de este evento (EML + PDF). La aprobación de Jefatura se adjunta aparte cuando responda."
       evidenceTypes={MAIL_TYPES} defaultType="solicitud" canWrite={canWrite} onArchived={notifyChanges}
       defaultSubject={eventMailDraft(selected).subject} defaultBody={eventMailDraft(selected).body}
+      templateVars={eventTemplateVars(selected)}
       repositoryFiles={eventFiles.map((doc) => ({ id: doc.id, nombre: doc.nombre_archivo, bytes: doc.bytes, origen: `${doc.tipo} · ${doc.estado}` }))}/>}
     <Panel title="4. Consolidado semestral (complementario)" description="Puede incluir un resumen de las autorizaciones, pero no sustituye los correos y cambios por evento.">
       <EvidenceList items={annualFiles}/>

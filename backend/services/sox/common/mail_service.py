@@ -35,6 +35,7 @@ from sqlalchemy import Integer, outparam, text
 from sqlalchemy.exc import IntegrityError
 
 from routes.sox.common.evidence import EVIDENCE_TYPES, MAX_BYTES, _check_control, _storage_root
+from services.sox.common import mail_config
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,8 @@ def check_event(db, control, anio, evento_id):
 
 
 def allowed_domains():
-    raw = os.getenv("SOX_MAIL_ALLOWED_DOMAINS", "")
-    return sorted({x.strip().lower().lstrip("@") for x in re.split(r"[,;\s]+", raw) if x.strip()})
+    """Dominios permitidos: backend/config/correos.json (respaldo: SOX_MAIL_ALLOWED_DOMAINS)."""
+    return mail_config.allowed_domains()
 
 
 def max_attachment_bytes():
@@ -114,8 +115,17 @@ def max_attachment_bytes():
 
 
 def sender():
-    value = os.getenv("SOX_MAIL_SENDER", "").strip()
+    """Buzón remitente: correos.json "remitente" (respaldo: SOX_MAIL_SENDER)."""
+    value = mail_config.sender()
     return value if EMAIL_RE.fullmatch(value) else ""
+
+
+def fixed_cc(control):
+    """Copias fijas del control definidas en correos.json (validadas contra la lista blanca)."""
+    items = mail_config.cc(control)
+    if items:
+        parse_addresses(";".join(items), f"copias del Control {control} (correos.json)", False)
+    return items
 
 
 def config_status(control):
@@ -128,6 +138,8 @@ def config_status(control):
         "max_adjuntos_mb": round(max_attachment_bytes() / 1024 / 1024, 1),
         "extensiones": sorted(ATTACHMENT_EXTENSIONS),
         "tipos_evidencia": sorted(mail_types(control)),
+        "copias_fijas": mail_config.cc(control),
+        "plantilla_borrador": mail_config.draft_template(control),
     }
 
 
@@ -189,7 +201,7 @@ def parse_addresses(raw, field, required):
         raise HTTPException(422, f"Máximo {MAX_RECIPIENTS} direcciones en {field}")
     domains = allowed_domains()
     if not domains:
-        raise HTTPException(503, "SOX_MAIL_ALLOWED_DOMAINS no está configurado; envío bloqueado")
+        raise HTTPException(503, "No hay dominios permitidos (correos.json > dominios_permitidos); envío bloqueado")
     seen = set()
     for address in items:
         if not EMAIL_RE.fullmatch(address):
@@ -308,7 +320,7 @@ def _get(db, outbox_id=None, idem=None):
 def list_outbox(db, control, anio, semestre, evento_id=None):
     _check_control(control, anio, semestre)
     rows = db.execute(text(_SELECT + """
-         WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio
+         WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio AND o.ORIGEN = 'MANUAL'
            AND ((:p_semestre IS NULL AND o.SEMESTRE IS NULL) OR o.SEMESTRE = :p_semestre)
            AND (:p_evento IS NULL OR o.EVENTO_ID = :p_evento)
          ORDER BY o.FECHA_SOLICITUD DESC, o.ID DESC FETCH FIRST 100 ROWS ONLY
@@ -351,11 +363,14 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
         raise HTTPException(503, "Envíos deshabilitados: configurar SOX_MAIL_ENABLED=true tras autorización")
     emisor = sender()
     if not emisor:
-        raise HTTPException(503, "SOX_MAIL_SENDER no está configurado")
+        raise HTTPException(503, "No hay remitente válido (correos.json > remitente)")
     to_list = parse_addresses(para, "Para", True)
     cc_list = parse_addresses(cc, "CC", False)
     if {x.casefold() for x in to_list} & {x.casefold() for x in cc_list}:
         raise HTTPException(422, "Una dirección no puede estar en Para y CC a la vez")
+    # Copias fijas del control (correos.json): se agregan sin repetir ni duplicar un "Para".
+    taken = {x.casefold() for x in to_list + cc_list}
+    cc_list += [x for x in fixed_cc(control) if x.casefold() not in taken]
     asunto = _clean_line(asunto, "el asunto", MAX_SUBJECT)
     cuerpo = (cuerpo or "").replace("\r\n", "\n").strip()
     if not cuerpo or len(cuerpo) > MAX_BODY or any(ord(c) < 32 and c not in "\n\t" for c in cuerpo):
