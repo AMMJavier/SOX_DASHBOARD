@@ -234,13 +234,28 @@ def sync_active_campaign():
 
         connection.commit()
 
+        # Correos de gerentes desde LDAP (igual que al iniciar campaña), salvo que
+        # correos.json > controles.7.aviso_gerentes.sincronizar_contactos_ldap sea false.
+        from services.sox.common import mail_config
+        if mail_config.c7_notice()["sincronizar_contactos_ldap"]:
+            from services.sox.control_7.manager_contact_sync import sincronizar
+            try:
+                contactos = sincronizar()
+            except Exception as exc:
+                print(f"[SOX CONTACTOS] Error sincronizando contactos: {type(exc).__name__}: {exc}", flush=True)
+                contactos = {"error": str(exc)}
+        else:
+            print("[SOX CONTACTOS] Sincronización LDAP OMITIDA: sincronizar_contactos_ldap=false en correos.json", flush=True)
+            contactos = {"omitido": True}
+
         return {
 
             "success": True,
             "message": "Campaña actualizada correctamente",
             "campana": nombre_campana,
             "id_campana": id_campana,
-            "resultado": resultado
+            "resultado": resultado,
+            "contactos": contactos,
 
         }
 
