@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
-import { downloadControlEvidence, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/controlEvidence";
+import { downloadControlEvidence, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { CalendarDays, CheckCheck, Clock, FolderOpen, History, Mail, Paperclip, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";

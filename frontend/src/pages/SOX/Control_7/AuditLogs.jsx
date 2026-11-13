@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Search, FileSpreadsheet, FileText } from "lucide-react";
 import Pagination from "../../../components/common/Pagination";
 import { api } from "../../../services/api";
-import { exportToExcel } from "../../../utils/exportExcel";
-import { exportToPdf } from "../../../utils/exportPdf";
+import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
+import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
 
 
 export default function AuditLogs() {

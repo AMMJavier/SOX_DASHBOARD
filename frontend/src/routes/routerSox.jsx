@@ -22,7 +22,7 @@ import AuditLogs from "../pages/SOX/Control_7/AuditLogs";
 
 // Configuración SOX
 import Settings from "../pages/SOX/Control_7/Settings";
-import Users from "../pages/SOX/Control_7/Users";
+import Users from "../pages/Admin/Users";
 
 const STANDARD_ROLES = [
   "administrador",

@@ -4,8 +4,8 @@ import {
 } from "lucide-react";
 import {
   createUser, deleteUser, getUserPermissions, listUsers, resetUserPassword, setUserActive, userApiError,
-} from "../../../services/usersService";
-import PasswordGenerator from "../../../components/common/PasswordGenerator";
+} from "../../services/usersService";
+import PasswordGenerator from "../../components/common/PasswordGenerator";
 
 /*
  * Administración de usuarios compartida por SOX (/SOX/Controls/Control_7/users)

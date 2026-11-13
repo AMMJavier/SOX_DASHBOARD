@@ -10,7 +10,7 @@ import {
 } from "../../services/assets/catalog";
 import {
   exportAssetHistoryExcel, exportAssetHistoryPdf,
-} from "../../utils/exportAssetHistory";
+} from "../../utils/assets/exportAssetHistory";
 
 const PAGE_SIZE = 20;
 const DETAIL_PAGE_SIZE = 100;

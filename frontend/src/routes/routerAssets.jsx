@@ -9,7 +9,7 @@ import Upload from "../pages/Assets/Upload";
 import Inventory from "../pages/Assets/Inventory";
 import Locations from "../pages/Assets/Locations";
 import Logs from "../pages/Assets/Logs";
-import Users from "../pages/SOX/Control_7/Users";
+import Users from "../pages/Admin/Users";
 
 const ASSETS_ACCESS = ["administrador", "assets_admin", "assets_viewer"];
 

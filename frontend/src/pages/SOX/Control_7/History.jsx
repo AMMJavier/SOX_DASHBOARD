@@ -3,9 +3,9 @@ import { Search } from "lucide-react";
 import StatusBadge from "../../../components/SOX/control_7/StatusBadge";
 import Pagination from "../../../components/common/Pagination";
 import { getHistory, getHistoryFilters } from "../../../services/sox/control_7/historyService";
-import { exportToExcel } from "../../../utils/exportExcel";
-import { exportToPdf } from "../../../utils/exportPdf";
-import { registerExport } from "../../../utils/registerExport";
+import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
+import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
+import { registerExport } from "../../../utils/sox/control_7/registerExport";
 
 export default function History() {
   const [history, setHistory] = useState([]);

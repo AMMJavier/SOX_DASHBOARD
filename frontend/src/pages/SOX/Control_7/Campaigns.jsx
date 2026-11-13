@@ -3,8 +3,8 @@ import { Search, FileSpreadsheet, FileText } from "lucide-react";
 import StatusBadge from "../../../components/SOX/control_7/StatusBadge";
 import Pagination from "../../../components/common/Pagination";
 import { api } from "../../../services/api";
-import { exportToExcel } from "../../../utils/exportExcel";
-import { exportToPdf } from "../../../utils/exportPdf";
+import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
+import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
 import { closeActiveCampaign, getCampaignValidations } from "../../../services/sox/control_7/campaignService";
 import CampaignNotifications from "../../../components/SOX/control_7/CampaignNotifications";
 

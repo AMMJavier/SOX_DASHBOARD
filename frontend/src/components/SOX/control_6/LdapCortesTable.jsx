@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getLatestC6Cut, getC6CutAccounts, syncC6Ldap } from "../../../services/sox/c6Cortes";
+import { getLatestC6Cut, getC6CutAccounts, syncC6Ldap } from "../../../services/sox/control_6/cortes";
 import { Panel, FIELD, PRIMARY, SECONDARY, InfoBanner } from "../common/ControlUI";
 
 const PAGE_SIZE = 25;

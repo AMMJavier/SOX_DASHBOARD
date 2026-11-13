@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Plus, Re
 import {
   createControl5Event, getControl5Events, uploadControlEvidence,
   downloadControlEvidence, verifyControlEvidence,
-} from "../../../services/sox/controlEvidence";
+} from "../../../services/sox/common/controlEvidence";
 import { FIELD, PRIMARY, SECONDARY, Panel } from "../common/ControlUI";
 import ControlMailPanel from "../common/ControlMailPanel";
 

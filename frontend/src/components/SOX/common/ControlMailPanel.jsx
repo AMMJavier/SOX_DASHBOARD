@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mail, Paperclip, RotateCcw, Send, X } from "lucide-react";
-import { archiveControlMail, getMailConfig, listControlMails, newIdempotencyKey, sendControlMail } from "../../../services/sox/controlMail";
-import { downloadControlEvidence } from "../../../services/sox/controlEvidence";
+import { archiveControlMail, getMailConfig, listControlMails, newIdempotencyKey, sendControlMail } from "../../../services/sox/common/controlMail";
+import { downloadControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { FIELD, InfoBanner, Panel, PRIMARY, SECONDARY } from "./ControlUI";
 
 const STATUS = {

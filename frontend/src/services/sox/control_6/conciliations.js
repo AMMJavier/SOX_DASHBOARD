@@ -1,4 +1,4 @@
-import { authenticatedFetch, API_BASE_URL } from "../apiFetch";
+import { authenticatedFetch, API_BASE_URL } from "../../apiFetch";
 const BASE = `${API_BASE_URL}/sox/controls/6/conciliaciones`;
 
 async function parse(response) {

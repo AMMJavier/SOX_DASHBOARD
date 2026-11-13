@@ -4,7 +4,7 @@ import { readStoredUser } from "../../../services/authSession";
 import {
   getControlEvidences, getControlHistory, uploadControlEvidence,
   downloadControlEvidence, verifyControlEvidence,
-} from "../../../services/sox/controlEvidence";
+} from "../../../services/sox/common/controlEvidence";
 
 const TYPES = [
   ["rrhh", "Correo / matriz de RR. HH."],

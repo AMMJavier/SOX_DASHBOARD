@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { readStoredUser } from "../../../services/authSession";
-import { previewControlReminder, sendControlReminder } from "../../../services/sox/controlEvidence";
+import { previewControlReminder, sendControlReminder } from "../../../services/sox/common/controlEvidence";
 import { Panel, FIELD, PRIMARY, SECONDARY, InfoBanner } from "./ControlUI";
 
 /** Previsualizacion y envio SOLO por accion expresa de un administrador SOX. */

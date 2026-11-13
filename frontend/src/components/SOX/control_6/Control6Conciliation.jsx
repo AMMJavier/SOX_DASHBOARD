@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { FileCheck2, FileSpreadsheet, RefreshCcw, GitCompareArrows, Download } from "lucide-react";
 import { Panel, FIELD, PRIMARY, SECONDARY, InfoBanner } from "../common/ControlUI";
-import { getLatestC6Cut } from "../../../services/sox/c6Cortes";
-import { previewC6Conciliation, saveC6Conciliation, listC6Conciliations } from "../../../services/sox/c6Conciliations";
-import { downloadControlEvidence } from "../../../services/sox/controlEvidence";
+import { getLatestC6Cut } from "../../../services/sox/control_6/cortes";
+import { previewC6Conciliation, saveC6Conciliation, listC6Conciliations } from "../../../services/sox/control_6/conciliations";
+import { downloadControlEvidence } from "../../../services/sox/common/controlEvidence";
 
 const currentYear = new Date().getFullYear();
 const currentSemester = new Date().getMonth() < 6 ? "1" : "2";
