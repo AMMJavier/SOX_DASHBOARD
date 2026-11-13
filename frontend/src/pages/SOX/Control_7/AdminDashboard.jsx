@@ -3,6 +3,7 @@ import { api } from "../../../services/api";
 import { ClipboardList, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { ShieldCheck } from "lucide-react";
 import Pagination from "../../../components/common/Pagination";
+import UnparametrizedVpns from "../../../components/SOX/control_7/UnparametrizedVpns";
 
 export default function AdminDashboard() {
   const [kpis, setKpis] = useState({
@@ -206,8 +207,10 @@ async function loadManagersProgress(){
           value={`${kpis.transform}/${kpis.total_checkpoint}`}
           color="bg-indigo-600"
           icon={ShieldCheck}
-        />        
+        />
       </div>
+
+      <UnparametrizedVpns />
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

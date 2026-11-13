@@ -812,3 +812,55 @@ def get_campaign_validations(
 
     finally:
         oracle.close()
+
+
+# ==========================================================
+# VPN SIN PARAMETRIZAR
+# Registros extraídos de Check Point (AUTOM.FUENTE_CHECKPOINT) que no llegaron
+# a AUTOM.CHECKPOINT_TRANSFORM: su comentario no tiene el formato esperado
+# (REQ / solicitante / gerente), por eso no entran a la validación de gerentes.
+# Es la diferencia del indicador "Conciliación Check Point" (p. ej. 763/769).
+# ==========================================================
+
+def _vpn_hint(comentario):
+    texto = (comentario or "").strip()
+    if not texto:
+        return "Sin comentario en Check Point"
+    if len(texto) < 10:
+        return "Comentario incompleto"
+    return "Formato de comentario no reconocido"
+
+
+@router.get("/campaign/vpn-sin-parametrizar")
+def get_unparametrized_vpns():
+    oracle = OracleConnection()
+    try:
+        connection = oracle.connect()
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT f.CHECKPOINT_UID, f.NOMBRE_VPN, f.COMENTARIO, f.COLOR, f.FECHA_ALMACENADO
+              FROM AUTOM.FUENTE_CHECKPOINT f
+             WHERE NOT EXISTS (
+                   SELECT 1 FROM AUTOM.CHECKPOINT_TRANSFORM t
+                    WHERE t.CHECKPOINT_UID = f.CHECKPOINT_UID)
+             ORDER BY f.NOMBRE_VPN
+        """)
+        items = []
+        for uid, nombre, comentario, color, fecha in cursor.fetchall():
+            if hasattr(comentario, "read"):  # CLOB
+                comentario = comentario.read()
+            items.append({
+                "checkpoint_uid": uid,
+                "nombre_vpn": nombre,
+                "comentario": comentario or "",
+                "color": color,
+                "fecha_almacenado": fecha.isoformat() if hasattr(fecha, "isoformat") else fecha,
+                "motivo": _vpn_hint(comentario),
+            })
+        cursor.execute("SELECT COUNT(*) FROM AUTOM.FUENTE_CHECKPOINT")
+        total_checkpoint = cursor.fetchone()[0]
+        return {"total": len(items), "total_checkpoint": total_checkpoint, "items": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No fue posible consultar las VPN sin parametrizar: {e}")
+    finally:
+        oracle.close()
