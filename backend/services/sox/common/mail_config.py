@@ -143,4 +143,7 @@ def c7_notice() -> dict:
         "nota_prueba": _text(test.get("nota")),
         "asunto": data.get("asunto"),
         "cuerpo": data.get("cuerpo"),
+        # false = al iniciar campaña NO se sobrescriben los correos de SOX_GERENTES_CONTACTO desde LDAP
+        # (útil para pruebas con correos cambiados a mano). Por defecto true.
+        "sincronizar_contactos_ldap": data.get("sincronizar_contactos_ldap", True) is not False,
     }

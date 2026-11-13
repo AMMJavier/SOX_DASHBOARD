@@ -177,6 +177,25 @@ def _notifications(db, campaign_id):
     return result
 
 
+def _address_set(value):
+    """Conjunto normalizado de direcciones ("a@x, b@y" -> {"a@x", "b@y"})."""
+    if isinstance(value, (list, tuple, set)):
+        value = ",".join(value)
+    return {x.strip().casefold() for x in re.split(r"[,;]", value or "") if x.strip()}
+
+
+def _for_current_email(attempts, emails):
+    """Intentos dirigidos al correo ACTUAL del gerente.
+
+    Un gerente queda notificado solo en el correo al que se le envió: si su correo
+    cambia en SOX_GERENTES_CONTACTO, vuelve a estar pendiente para el correo nuevo.
+    """
+    if not emails:
+        return attempts
+    current = _address_set(emails)
+    return [a for a in attempts if _address_set(a["correo"]) == current]
+
+
 def _notification_state(attempts):
     """Estado que decide si se puede (re)enviar a un gerente."""
     if not attempts:
@@ -215,15 +234,19 @@ def preview(db):
     for key, item in sorted(managers.items(), key=lambda kv: kv[1]["gerente"]):
         contact_state, emails = _resolve_contact(contacts, key)
         email = ", ".join(emails) if emails else None
-        attempts = sent.get(key, [])
-        state, count = _notification_state(attempts)
+        all_attempts = sent.get(key, [])
+        attempts = _for_current_email(all_attempts, emails)
+        state, _ = _notification_state(attempts)
+        count = len(all_attempts)
         last = attempts[-1] if attempts else None
+        changed = bool(all_attempts) and not attempts and bool(emails)
         items.append({
             "gerente": item["gerente"], "clave": _key_hash(key), "vpn": item["vpn"],
             "pendientes": item["vpn"] - item["confirmadas"], "correo": email,
             "correos_encontrados": len(emails), "contacto": contact_state,
             "notificacion": state, "intentos": count,
-            "detalle": last["detalle"] if last else None,
+            "detalle": (f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
+                        if changed else (last["detalle"] if last else None)),
             "fecha_envio": _fmt(last["fecha_envio"]) if last else None,
             "enviable": contact_state == READY and _can_send(state),
         })
@@ -367,10 +390,12 @@ def preview_one(db, campaign, key, item):
     contact_state, emails = _resolve_contact(contacts, key)
     if contact_state != READY:
         return None
-    state, count = _notification_state(_notifications(db, campaign["id"]).get(key, []))
+    all_attempts = _notifications(db, campaign["id"]).get(key, [])
+    state, _ = _notification_state(_for_current_email(all_attempts, emails))
     if not _can_send(state):
         return None
-    return {"correo": emails, "intento": count + 1}
+    # El número de intento cuenta TODOS los envíos del gerente: la clave de idempotencia no se repite.
+    return {"correo": emails, "intento": len(all_attempts) + 1}
 
 
 def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None):

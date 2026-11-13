@@ -6,19 +6,21 @@
     "Los cuerpos pueden escribirse como lista de líneas. Las {variables} se reemplazan al enviar.",
     "Lo que no esté aquí se toma del .env (SOX_MAIL_SENDER, SOX_MAIL_ALLOWED_DOMAINS, SOX_REMINDER_TO_n)."
   ],
-
   "remitente": "buzon.autorizado@empresa.com",
-  "dominios_permitidos": ["empresa.com", "otra-empresa.com"],
-
+  "dominios_permitidos": [
+    "empresa.com",
+    "otra-empresa.com"
+  ],
   "_copias_generales": "Se agregan en CC a TODOS los correos SOX (correo formal, notificaciones y avisos del Control 7).",
   "copias_generales": [],
-
   "controles": {
     "1": {
       "copias": [],
       "notificacion": {
         "_variables": "{anio} {periodo} {referencia} {referencia_linea}",
-        "destinatarios": ["responsable@empresa.com"],
+        "destinatarios": [
+          "responsable@empresa.com"
+        ],
         "asunto": "SOX Control 1 - Evidencia anual del procedimiento SIS016 | {anio}",
         "cuerpo": [
           "Estimados:",
@@ -124,7 +126,9 @@
         "modo_prueba": {
           "_info": "Con activo=true los avisos NO van a los gerentes: van a estos destinatarios con asunto [PRUEBA].",
           "activo": true,
-          "destinatarios": ["prueba@empresa.com"],
+          "destinatarios": [
+            "prueba@empresa.com"
+          ],
           "nota": [
             "*** CORREO DE PRUEBA ***",
             "Este aviso corresponde al gerente: {gerente}.",
@@ -133,6 +137,8 @@
             ""
           ]
         },
+        "_sincronizar_contactos_ldap": "true = al iniciar campaña se actualizan los correos de SOX_GERENTES_CONTACTO desde LDAP (sobrescribe cambios manuales). false = se conservan los correos de la tabla (pruebas).",
+        "sincronizar_contactos_ldap": true,
         "asunto": "SOX Control 7 - Inicio de validación de accesos VPN | {periodo} | Fecha límite {fecha_limite}",
         "cuerpo": [
           "Estimado(a) {gerente}:",

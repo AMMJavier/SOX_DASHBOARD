@@ -400,9 +400,16 @@ def start_campaign():
         
 
 
-        # 5. Actualizar contactos LDAP
-        from services.sox.control_7.manager_contact_sync import sincronizar
-        contactos = sincronizar()
+        # 5. Actualizar contactos LDAP (sobrescribe CORREO en SOX_GERENTES_CONTACTO).
+        # Se omite si correos.json > controles.7.aviso_gerentes.sincronizar_contactos_ldap = false,
+        # para no pisar correos cambiados a mano durante pruebas.
+        from services.sox.common import mail_config
+        if mail_config.c7_notice()["sincronizar_contactos_ldap"]:
+            from services.sox.control_7.manager_contact_sync import sincronizar
+            contactos = sincronizar()
+        else:
+            contactos = {"omitido": True,
+                         "motivo": "sincronizar_contactos_ldap=false en correos.json: se conservan los correos actuales"}
 
         # 6. Preparar avisos a gerentes (sin enviar).
         # El envío real se revisa y confirma en Campañas > Notificación a gerentes,
