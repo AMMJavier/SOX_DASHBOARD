@@ -4,7 +4,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from oracle_database import get_oracle_db
+from database.oracle_database import get_oracle_db
 from models import Usuario
 from auth.security import decode_access_token
 from auth.session_service import get_valid_session

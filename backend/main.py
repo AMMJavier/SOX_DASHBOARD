@@ -12,7 +12,7 @@ from auth.auth import router as auth_router
 from auth.users import router as users_router
 from auth.dependencies import require_sox_access, require_assets_access
 from routes.sox import router as sox_router
-from routes.assets_routes import router as assets_router
+from routes.assets import router as assets_router
 
 app = FastAPI(title="HITSS / SOX Dashboard API", version="1.1.0", swagger_ui_parameters={"defaultModelsExpandDepth": -1})
 

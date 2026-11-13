@@ -1,6 +1,6 @@
 """Conexión directa Oracle para consultas SQL existentes de controles SOX."""
 import oracledb
-from oracle_settings import get_oracle_config
+from database.oracle_settings import get_oracle_config
 
 class OracleConnection:
     def __init__(self):

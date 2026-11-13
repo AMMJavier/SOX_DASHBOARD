@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
-from oracle_database import get_oracle_db
+from database.oracle_database import get_oracle_db
 from models import Usuario, SoxSesion
 from schemas import CreateUserRequest, UsuarioAdminResponse, UsuarioEstadoRequest, ResetUserPasswordRequest
 from auth.dependencies import require_admin

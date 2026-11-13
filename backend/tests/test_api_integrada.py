@@ -10,7 +10,7 @@ os.environ["JWT_SECRET_KEY"] = "test-only-random-not-a-production-secret-ABC1234
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event
-from oracle_database import engine, SessionLocal, get_oracle_db
+from database.oracle_database import engine, SessionLocal, get_oracle_db
 from models import Usuario
 from main import app
 from auth import auth as auth_module

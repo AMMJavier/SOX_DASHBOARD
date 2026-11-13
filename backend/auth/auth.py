@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from oracle_database import get_oracle_db
+from database.oracle_database import get_oracle_db
 from models import Usuario
 from schemas import LoginRequest, TokenResponse, ChangePasswordRequest
 from auth.ldap_service import authenticate_ldap

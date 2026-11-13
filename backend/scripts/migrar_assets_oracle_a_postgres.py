@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import URL, create_engine, text  # noqa: E402
 
-from assets_database import get_assets_engine  # noqa: E402
-from oracle_settings import get_oracle_config  # noqa: E402
+from database.assets_database import get_assets_engine  # noqa: E402
+from database.oracle_settings import get_oracle_config  # noqa: E402
 
 BATCH = 1000
 

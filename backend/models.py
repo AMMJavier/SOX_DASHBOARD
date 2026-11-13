@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Date, TIMESTAMP
-from oracle_database import Base
+from database.oracle_database import Base
 
 
 class Validation(Base):
