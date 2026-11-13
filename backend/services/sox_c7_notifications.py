@@ -114,6 +114,35 @@ def _campaign_managers(db):
     return managers, without_manager, total
 
 
+def _vpns_by_manager(db):
+    """VPN de la campaña agrupadas por gerente normalizado (misma deduplicación que _campaign_managers)."""
+    rows = db.execute(text("""
+        SELECT GERENTE AS "gerente", NOMBRE_VPN AS "nombre_vpn", REQ AS "req", SOLICITANTE AS "solicitante"
+          FROM (SELECT t.GERENTE, t.NOMBRE_VPN, t.REQ, t.SOLICITANTE,
+                       ROW_NUMBER() OVER (PARTITION BY t.CHECKPOINT_UID ORDER BY t.FECHA_ALMACENADO DESC) rn
+                  FROM AUTOM.CHECKPOINT_TRANSFORM t)
+         WHERE rn = 1
+         ORDER BY NOMBRE_VPN
+    """)).mappings()
+    result = {}
+    for row in rows:
+        key = manager_key(row["gerente"])
+        if key:
+            result.setdefault(key, []).append(dict(row))
+    return result
+
+
+def _vpn_table(vpns):
+    """Tabla en texto plano (el aviso se envía en formato texto)."""
+    def cell(value):
+        return re.sub(r"\s+", " ", str(value or "-")).strip() or "-"
+    rows = [(cell(v["nombre_vpn"]), cell(v["req"]), cell(v["solicitante"])) for v in vpns]
+    head = ("NOMBRE VPN", "REQ", "SOLICITANTE")
+    widths = [max(len(head[i]), *(len(r[i]) for r in rows)) for i in range(3)] if rows else [len(h) for h in head]
+    line = lambda r: "  " + "   ".join(r[i].ljust(widths[i]) for i in range(3)).rstrip()
+    return "\n".join([line(head), line(tuple("-" * w for w in widths))] + [line(r) for r in rows])
+
+
 def _contacts(db):
     rows = db.execute(text("""
         SELECT NOMBRE_COMPLETO AS "nombre", CORREO AS "correo"
@@ -203,7 +232,7 @@ def preview(db):
 
 # ---------------------------------------------------------------- mensaje
 
-def compose(campaign, manager_name, vpn_count):
+def compose(campaign, manager_name, vpn_count, vpns=None):
     deadline = campaign["fecha_limite"]
     deadline_txt = deadline.strftime("%d/%m/%Y") if isinstance(deadline, datetime) else str(deadline or "por confirmar")
     period = f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre"
@@ -221,7 +250,9 @@ def compose(campaign, manager_name, vpn_count):
         f"{portal_line} para revisar cada acceso e indicar si debe mantenerse o eliminarse, "
         f"agregando observaciones cuando corresponda.\n\n"
         "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
-        "usted la confirma en el portal.\n\nSaludos."
+        "usted la confirma en el portal.\n\n"
+        + (f"Sus VPN ({len(vpns)}):\n\n{_vpn_table(vpns)}\n\n" if vpns else "")
+        + "Saludos."
     )
     return subject[:200], body
 
@@ -276,6 +307,7 @@ def run_batch(campaign_id, claves, user_id, username):
             return
         wanted = set(claves)
         managers, _, _ = _campaign_managers(db)
+        vpns = _vpns_by_manager(db)
         for key, item in managers.items():
             if _key_hash(key) not in wanted:
                 continue
@@ -285,7 +317,8 @@ def run_batch(campaign_id, claves, user_id, username):
                 skipped += 1
                 continue
             try:
-                ok = _send_one(db, campaign, item, current["correo"], current["intento"], user_id, username)
+                ok = _send_one(db, campaign, item, current["correo"], current["intento"], user_id, username,
+                               vpns.get(key, []))
                 sent += 1 if ok else 0
                 failed += 0 if ok else 1
             except Exception:
@@ -309,8 +342,8 @@ def preview_one(db, campaign, key, item):
     return {"correo": emails, "intento": count + 1}
 
 
-def _send_one(db, campaign, item, emails, attempt, user_id, username):
-    subject, body = compose(campaign, item["gerente"], item["vpn"])
+def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None):
+    subject, body = compose(campaign, item["gerente"], item["vpn"], vpns)
     if modo_prueba():
         subject = f"[PRUEBA] {subject}"[:200]
         body = (f"*** CORREO DE PRUEBA ***\nEste aviso corresponde al gerente: {item['gerente']}.\n"
