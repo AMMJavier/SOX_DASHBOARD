@@ -33,7 +33,13 @@ def notifications_preview(db: Session = Depends(get_oracle_db), current: Usuario
 @router.post("/campaign/notifications/send", status_code=202, summary="Enviar avisos pendientes a gerentes")
 def notifications_send(payload: SendRequest, background: BackgroundTasks,
                        db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
-    campaign, keys = notifications.start_batch(db, current, claves=payload.claves, confirmar=payload.confirmar)
+    try:
+        campaign, keys = notifications.start_batch(db, current, claves=payload.claves, confirmar=payload.confirmar)
+    except HTTPException as exc:
+        notifications.mail.console(f"AVISOS C7 NO INICIADOS | usuario={current.username} "
+                                   f"HTTP {exc.status_code}: {exc.detail}")
+        raise
+    notifications.mail.console(f"AVISOS C7 EN COLA | {len(keys)} gerente(s) | usuario={current.username}")
     background.add_task(notifications.run_batch, campaign["id"], keys, current.id, current.username)
     return {"en_cola": len(keys), "campana": campaign["nombre"],
             "mensaje": "Envío iniciado en segundo plano. Actualiza la vista para ver el avance."}

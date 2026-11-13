@@ -5,6 +5,7 @@ ambos vienen de backend/config/correos.json. Cada envío queda auditado en
 AUTOM.SOX_MAIL_OUTBOX con ORIGEN='RECORDATORIO' antes de llamar a Microsoft Graph.
 """
 import logging
+import time
 from typing import Optional
 from uuid import uuid4
 
@@ -47,6 +48,20 @@ def preview(control: int, payload: RequestReminder, current: Usuario = Depends(g
 def send(control: int, payload: RequestReminder,
          current: Usuario = Depends(get_current_user),
          db: Session = Depends(get_oracle_db)):
+    start = time.monotonic()
+    mail.console(f"NOTIFICACION Control {control} INICIO | usuario={current.username} anio={payload.anio} "
+                 f"semestre={payload.semestre}")
+    try:
+        result = _send(control, payload, current, db)
+    except HTTPException as exc:
+        mail.console(f"NOTIFICACION Control {control} NO ENVIADA tras {mail.elapsed(start)} | "
+                     f"HTTP {exc.status_code}: {exc.detail}")
+        raise
+    mail.console(f"NOTIFICACION Control {control} ENVIADA (N{control}-{result['auditoria_id']}) en {mail.elapsed(start)}")
+    return result
+
+
+def _send(control, payload, current, db):
     _check_admin(current)
     if payload.confirmar is not True:
         raise HTTPException(422, "Requiere confirmación explícita")
@@ -75,6 +90,8 @@ def send(control: int, payload: RequestReminder,
         value = result.out_parameters["p_returned"]
         outbox_id = int(value[0] if isinstance(value, (tuple, list)) else value)
         db.commit()
+        mail.console(f"NOTIFICACION Control {control} registrada en SOX_MAIL_OUTBOX #{outbox_id} | "
+                     f"para={message['destinatarios']} cc={message['cc']}")
     except Exception:
         db.rollback()
         logger.exception("No se pudo registrar la notificación SOX")

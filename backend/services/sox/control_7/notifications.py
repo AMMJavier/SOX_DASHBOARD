@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 import unicodedata
 from uuid import uuid4
 
@@ -354,9 +355,13 @@ def run_batch(campaign_id, claves, user_id, username):
     from database.oracle_database import SessionLocal
     db = SessionLocal()
     sent = failed = skipped = 0
+    start_batch_t = time.monotonic()
+    mail.console(f"AVISOS C7 LOTE INICIO | campaña={campaign_id} gerentes={len(claves)} usuario={username} "
+                 f"modo={'PRUEBA' if modo_prueba() else 'REAL (SOX_GERENTES_CONTACTO)'}")
     try:
         campaign = active_campaign(db)
         if not campaign or campaign["id"] != campaign_id:
+            mail.console(f"AVISOS C7 LOTE CANCELADO: la campaña {campaign_id} ya no está activa")
             logger.warning("Lote C7 cancelado: la campaña %s ya no está activa", campaign_id)
             return
         wanted = set(claves)
@@ -369,19 +374,28 @@ def run_batch(campaign_id, claves, user_id, username):
             current = preview_one(db, campaign, key, item)
             if not current:
                 skipped += 1
+                mail.console(f"AVISO C7 OMITIDO | gerente={item['gerente']!r}: sin contacto válido o ya notificado en su correo actual")
                 continue
+            start_one = time.monotonic()
+            mail.console(f"AVISO C7 INICIO | gerente={item['gerente']!r} para={current['correo']} "
+                         f"vpn={item['vpn']} intento={current['intento']}")
             try:
                 ok = _send_one(db, campaign, item, current["correo"], current["intento"], user_id, username,
                                vpns.get(key, []))
                 sent += 1 if ok else 0
                 failed += 0 if ok else 1
-            except Exception:
+                mail.console(f"AVISO C7 {'ENVIADO' if ok else 'NO ENVIADO'} en {mail.elapsed(start_one)} | gerente={item['gerente']!r}")
+            except Exception as exc:
                 db.rollback()
                 failed += 1
+                mail.console(f"AVISO C7 ERROR en {mail.elapsed(start_one)} | gerente={item['gerente']!r}: {type(exc).__name__}: {exc}")
                 logger.exception("Aviso C7 a %s no enviado", item["gerente"])
     finally:
         db.close()
         _batch_lock.release()
+        total = time.monotonic() - start_batch_t
+        mail.console(f"AVISOS C7 LOTE FIN | enviados={sent} fallidos={failed} omitidos={skipped} | "
+                     f"tiempo total {total:.2f}s" + (f" | promedio {total / sent:.2f}s por aviso enviado" if sent else ""))
         logger.info("Lote C7 campaña %s: enviados=%s fallidos=%s omitidos=%s", campaign_id, sent, failed, skipped)
 
 

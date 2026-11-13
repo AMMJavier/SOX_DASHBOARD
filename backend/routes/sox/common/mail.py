@@ -62,12 +62,16 @@ async def send_mail(
             raise HTTPException(413, "Los adjuntos superan el tamaño permitido")
         files.append((upload.filename, content))
     # El envío y el archivado llaman a Graph (bloqueante): se ejecutan fuera del event loop.
-    return await run_in_threadpool(
-        mail.send_mail, db, control=control, anio=anio, semestre=semestre, tipo=tipo,
-        para=para, cc=cc, asunto=asunto, cuerpo=cuerpo, adjuntos=files,
-        idempotency_key=idempotency_key, user=current, evidencias_ids=repository_ids,
-        evento_id=evento_id,
-    )
+    try:
+        return await run_in_threadpool(
+            mail.send_mail, db, control=control, anio=anio, semestre=semestre, tipo=tipo,
+            para=para, cc=cc, asunto=asunto, cuerpo=cuerpo, adjuntos=files,
+            idempotency_key=idempotency_key, user=current, evidencias_ids=repository_ids,
+            evento_id=evento_id,
+        )
+    except HTTPException as exc:
+        mail.console(f"CORREO FORMAL Control {control} NO ENVIADO | HTTP {exc.status_code}: {exc.detail}")
+        raise
 
 
 @router.post("/{control}/correos/{outbox_id}/archivar")

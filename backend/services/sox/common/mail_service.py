@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -38,6 +39,19 @@ from routes.sox.common.evidence import EVIDENCE_TYPES, MAX_BYTES, _check_control
 from services.sox.common import mail_config
 
 logger = logging.getLogger(__name__)
+
+
+def console(message):
+    """Traza de correos en la consola de uvicorn (y en uvicorn.log si se lanza con nohup).
+
+    flush=True: con nohup la salida va a un archivo y, sin esto, quedaría retenida en memoria.
+    """
+    print(f"[SOX CORREO {datetime.now():%Y-%m-%d %H:%M:%S}] {message}", flush=True)
+
+
+def elapsed(start):
+    """Segundos transcurridos desde time.monotonic() con 2 decimales."""
+    return f"{time.monotonic() - start:.2f}s"
 
 EMAIL_RE = re.compile(r"^[^@\s,;<>\"']+@[^@\s,;<>\"']+\.[^@\s,;<>\"']+$")
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
@@ -170,13 +184,24 @@ def _run_worker(command, payload, timeout):
         if creds:
             args += ["-c", creds]
         args += [command, "-m", msg_path]
-        proc = subprocess.run(args, shell=False, capture_output=True, text=True, timeout=timeout, check=False)
+        to = payload.get("destinatarios")
+        console(f"Graph '{command}' INICIO | de={payload.get('emisor')} para={to} cc={payload.get('cc') or []} "
+                f"asunto={str(payload.get('asunto') or '')[:80]!r} | python={python}")
+        start = time.monotonic()
+        try:
+            proc = subprocess.run(args, shell=False, capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            console(f"Graph '{command}' TIMEOUT tras {elapsed(start)} (límite {timeout}s) para={to}")
+            raise
         if proc.stderr:
             logger.info("sox_graph_mail %s stderr: %s", command, proc.stderr[-2000:])
         try:
             result = json.loads((proc.stdout or "").strip().splitlines()[-1])
         except (IndexError, ValueError):
             result = {"ok": False, "error": "Respuesta no interpretable del worker Graph"}
+        ok = proc.returncode == 0 and result.get("ok")
+        console(f"Graph '{command}' {'OK' if ok else 'ERROR'} en {elapsed(start)} | codigo={proc.returncode} para={to}"
+                + ("" if ok else f" | error={result.get('error')} | stderr={(proc.stderr or '').strip()[-500:]!r}"))
         return proc.returncode, result
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -342,7 +367,11 @@ def _set_state(db, outbox_id, estado, detalle=None, **extra):
 
 def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, adjuntos, idempotency_key, user,
               evidencias_ids=None, evento_id=None):
+    start_total = time.monotonic()
+    console(f"CORREO FORMAL Control {control} INICIO | usuario={user.username} para={para!r} cc={cc!r} "
+            f"asunto={str(asunto or '')[:80]!r} evento={evento_id}")
     if control not in enabled_controls():
+        console(f"CORREO FORMAL Control {control} RECHAZADO: control no habilitado en SOX_MAIL_CONTROLS")
         raise HTTPException(404, "El envío de correos no está habilitado para este control")
     _check_control(control, anio, semestre)
     if control == 5 and semestre is not None:
@@ -452,10 +481,15 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
     finally:
         shutil.rmtree(attach_dir, ignore_errors=True)
 
+    console(f"CORREO FORMAL Control {control} #{outbox_id} ENVIADO en {elapsed(start_total)}; archivando copia como evidencia...")
     # El archivado nunca provoca un segundo envío: si falla queda ACEPTADO para reintentar.
+    start_archive = time.monotonic()
     try:
         archive_mail(db, control=control, outbox_id=outbox_id, user=user)
+        console(f"CORREO FORMAL Control {control} #{outbox_id} ARCHIVADO en {elapsed(start_archive)} "
+                f"| total {elapsed(start_total)}")
     except HTTPException as exc:
+        console(f"CORREO FORMAL Control {control} #{outbox_id} enviado, ARCHIVADO PENDIENTE tras {elapsed(start_archive)}: {exc.detail}")
         logger.warning("Correo SOX #%s enviado; archivado pendiente: %s", outbox_id, exc.detail)
     return _get(db, outbox_id=outbox_id)
 
