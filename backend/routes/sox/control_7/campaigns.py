@@ -816,19 +816,51 @@ def get_campaign_validations(
 
 # ==========================================================
 # VPN SIN PARAMETRIZAR
-# Registros extraídos de Check Point (AUTOM.FUENTE_CHECKPOINT) que no llegaron
-# a AUTOM.CHECKPOINT_TRANSFORM: su comentario no tiene el formato esperado
-# (REQ / solicitante / gerente), por eso no entran a la validación de gerentes.
-# Es la diferencia del indicador "Conciliación Check Point" (p. ej. 763/769).
+# VPN de Check Point cuyo comentario no cumple "REQ - SOLICITANTE - GERENTE".
+# Fuente: AUTOM.CHECKPOINT_RECHAZADOS, que llena el trigger
+# TRG_FUENTE_CHECKPOINT_TRANSFORM con el motivo exacto (sql/checkpoint_rechazados.sql).
+# Si esa tabla aún no existe (ORA-00942), se calcula como antes: FUENTE sin TRANSFORM.
 # ==========================================================
 
+_SQL_RECHAZADOS = """
+    SELECT CHECKPOINT_UID, NOMBRE_VPN, COMENTARIO, MOTIVO, FECHA_ALMACENADO, FECHA_DETECCION
+      FROM (SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.CHECKPOINT_UID
+                                           ORDER BY r.ID_CAMPANA NULLS LAST, r.FECHA_DETECCION DESC) rn
+              FROM AUTOM.CHECKPOINT_RECHAZADOS r
+             WHERE (r.ID_CAMPANA IS NULL
+                    OR r.ID_CAMPANA = (SELECT MAX(ID_CAMPANA) FROM AUTOM.CAMPANAS_SOX WHERE ESTADO = 'ACTIVA'))
+               -- Solo las que siguen en la extracción actual y no se corrigieron
+               AND EXISTS (SELECT 1 FROM AUTOM.FUENTE_CHECKPOINT f WHERE f.CHECKPOINT_UID = r.CHECKPOINT_UID)
+               AND NOT EXISTS (SELECT 1 FROM AUTOM.CHECKPOINT_TRANSFORM t WHERE t.CHECKPOINT_UID = r.CHECKPOINT_UID))
+     WHERE rn = 1
+     ORDER BY NOMBRE_VPN
+"""
+
+_SQL_CALCULADO = """
+    SELECT f.CHECKPOINT_UID, f.NOMBRE_VPN, f.COMENTARIO, NULL, f.FECHA_ALMACENADO, NULL
+      FROM AUTOM.FUENTE_CHECKPOINT f
+     WHERE NOT EXISTS (SELECT 1 FROM AUTOM.CHECKPOINT_TRANSFORM t WHERE t.CHECKPOINT_UID = f.CHECKPOINT_UID)
+     ORDER BY f.NOMBRE_VPN
+"""
+
+
 def _vpn_hint(comentario):
+    """Solo para el modo calculado (sin tabla): el motivo exacto lo da F_CHECKPOINT_MOTIVO."""
     texto = (comentario or "").strip()
     if not texto:
-        return "Sin comentario en Check Point"
-    if len(texto) < 10:
-        return "Comentario incompleto"
+        return "Comentario vacío"
+    partes = texto.count(" - ")
+    if partes == 0:
+        return 'Sin separador " - " (formato: REQ - SOLICITANTE - GERENTE)'
+    if partes == 1:
+        return "Solo 2 partes: falta una (formato: REQ - SOLICITANTE - GERENTE)"
+    if partes > 2:
+        return 'Más de 3 partes: el separador " - " aparece más de dos veces'
     return "Formato de comentario no reconocido"
+
+
+def _iso(value):
+    return value.isoformat() if hasattr(value, "isoformat") else value
 
 
 @router.get("/campaign/vpn-sin-parametrizar")
@@ -837,29 +869,29 @@ def get_unparametrized_vpns():
     try:
         connection = oracle.connect()
         cursor = connection.cursor()
-        cursor.execute("""
-            SELECT f.CHECKPOINT_UID, f.NOMBRE_VPN, f.COMENTARIO, f.COLOR, f.FECHA_ALMACENADO
-              FROM AUTOM.FUENTE_CHECKPOINT f
-             WHERE NOT EXISTS (
-                   SELECT 1 FROM AUTOM.CHECKPOINT_TRANSFORM t
-                    WHERE t.CHECKPOINT_UID = f.CHECKPOINT_UID)
-             ORDER BY f.NOMBRE_VPN
-        """)
+        origen = "tabla"
+        try:
+            cursor.execute(_SQL_RECHAZADOS)
+        except Exception as exc:
+            if "ORA-00942" not in str(exc):
+                raise
+            origen = "calculado"  # Falta ejecutar sql/checkpoint_rechazados.sql
+            cursor.execute(_SQL_CALCULADO)
         items = []
-        for uid, nombre, comentario, color, fecha in cursor.fetchall():
+        for uid, nombre, comentario, motivo, fecha, deteccion in cursor.fetchall():
             if hasattr(comentario, "read"):  # CLOB
                 comentario = comentario.read()
             items.append({
                 "checkpoint_uid": uid,
                 "nombre_vpn": nombre,
                 "comentario": comentario or "",
-                "color": color,
-                "fecha_almacenado": fecha.isoformat() if hasattr(fecha, "isoformat") else fecha,
-                "motivo": _vpn_hint(comentario),
+                "motivo": motivo or _vpn_hint(comentario),
+                "fecha_almacenado": _iso(fecha),
+                "fecha_deteccion": _iso(deteccion),
             })
         cursor.execute("SELECT COUNT(*) FROM AUTOM.FUENTE_CHECKPOINT")
         total_checkpoint = cursor.fetchone()[0]
-        return {"total": len(items), "total_checkpoint": total_checkpoint, "items": items}
+        return {"total": len(items), "total_checkpoint": total_checkpoint, "origen": origen, "items": items}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"No fue posible consultar las VPN sin parametrizar: {e}")
     finally:

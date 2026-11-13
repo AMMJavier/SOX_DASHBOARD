@@ -74,6 +74,8 @@ export default function UnparametrizedVpns() {
         {!error && loading && !data && <p className="text-sm text-slate-500">Cargando...</p>}
         {!error && data && total === 0 && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Todas las VPN extraídas de Check Point están parametrizadas.</p>}
         {!error && total > 0 && <>
+          {data.origen === "calculado" && <p className="mb-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+            Motivo estimado: falta ejecutar <code>backend/sql/checkpoint_rechazados.sql</code> en Oracle para registrar el motivo exacto.</p>}
           <div className="relative mb-4 sm:w-80">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar VPN o comentario"
@@ -89,7 +91,8 @@ export default function UnparametrizedVpns() {
                   <td className="px-4 py-3 font-semibold text-slate-900">{v.nombre_vpn}<p className="font-mono text-[11px] font-normal text-slate-400">{v.checkpoint_uid}</p></td>
                   <td className="px-4 py-3"><span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">{v.motivo}</span></td>
                   <td className="max-w-md px-4 py-3 text-slate-600"><span className="whitespace-pre-wrap break-words">{v.comentario || "—"}</span></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{v.fecha_almacenado ? String(v.fecha_almacenado).replace("T", " ").slice(0, 16) : "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{v.fecha_almacenado ? String(v.fecha_almacenado).replace("T", " ").slice(0, 16) : "—"}
+                    {v.fecha_deteccion && <p className="text-[11px] text-slate-400">Detectada: {String(v.fecha_deteccion).replace("T", " ").slice(0, 16)}</p>}</td>
                 </tr>)}
               </tbody>
             </table>
