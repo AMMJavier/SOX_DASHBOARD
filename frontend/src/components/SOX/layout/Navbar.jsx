@@ -45,8 +45,10 @@ export default function Navbar({ module }) {
     setActionLoading(true);
     setError("");
     try {
-      await action();
+      const result = await action();
       await loadCampaign();
+      // El backend responde success=false si, por ejemplo, falló la sincronización con Check Point.
+      if (result && result.success === false) setError(result.message || "No se pudo completar la operación de campaña");
     } catch (err) {
       setError(err.response?.data?.detail || "No se pudo completar la operación de campaña");
     } finally {
@@ -63,7 +65,7 @@ export default function Navbar({ module }) {
           <div className="min-w-[220px] rounded-md border bg-white px-4 py-2">{loadingCampaign ? "Cargando campaña" : error ? "No disponible" : campaign?.name || "Sin campaña activa"}</div>
           {canManageCampaign && (campaign ?
             <button onClick={() => handleCampaignAction(syncCampaign)} disabled={actionLoading} className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Actualizando..." : "Actualizar campaña"}</button> :
-            <button onClick={() => handleCampaignAction(startCampaign)} disabled={actionLoading || Boolean(error)} className="rounded-md bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Iniciando..." : "Iniciar campaña"}</button>
+            <button onClick={() => handleCampaignAction(startCampaign)} disabled={actionLoading} className="rounded-md bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Iniciando..." : "Iniciar campaña"}</button>
           )}
         </>}
         {error && <span role="alert" className="max-w-xs text-sm text-red-700">{String(error)}</span>}

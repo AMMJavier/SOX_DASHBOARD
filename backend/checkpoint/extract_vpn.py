@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from checkpoint.checkpoint_client import CheckPointClient
 import json
 
@@ -136,18 +137,16 @@ def extract_vpn_data():
             f"Registros preparados: {len(registros)}"
         )
 
-        with open(
-            "checkpoint/output/vpn_export.json",
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                registros,
-                file,
-                indent=4,
-                default=str
-            )
+        # Copia de respaldo de la extracción. Ruta fija junto a este archivo (no depende de la
+        # carpeta desde donde se lance la API) y se crea si no existe: la carpeta output/ no
+        # viaja en git ni en el zip de despliegue. Si la copia falla, la sincronización sigue.
+        export_path = Path(__file__).resolve().parent / "output" / "vpn_export.json"
+        try:
+            export_path.parent.mkdir(parents=True, exist_ok=True)
+            with export_path.open("w", encoding="utf-8") as file:
+                json.dump(registros, file, indent=4, default=str)
+        except OSError as exc:
+            print(f"Aviso: no se pudo guardar la copia {export_path}: {exc}")
 
         return registros
 

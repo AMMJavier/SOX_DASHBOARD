@@ -214,9 +214,16 @@ def sync_active_campaign():
             from checkpoint.sync_service import sync_checkpoint_oracle
 
             resultado = sync_checkpoint_oracle()
-
-           
-
+            if not isinstance(resultado, dict) or resultado.get("status") != "OK":
+                detalle = (resultado or {}).get("detalle") or "Check Point no devolvió registros"
+                print(f"Actualización de campaña con error: {detalle}", flush=True)
+                return {
+                    "success": False,
+                    "message": f"No se pudo actualizar desde Check Point ({detalle})",
+                    "campana": nombre_campana,
+                    "id_campana": id_campana,
+                    "resultado": resultado,
+                }
 
         except Exception as e:
 
@@ -277,7 +284,16 @@ def start_campaign():
         # 2. Ejecutar primera sincronización
         from checkpoint.sync_service import sync_checkpoint_oracle
         resultado = sync_checkpoint_oracle()
-       
+        # Sin VPN cargadas no se crea la campaña (antes quedaba una campaña vacía en 0).
+        if not isinstance(resultado, dict) or resultado.get("status") != "OK":
+            detalle = (resultado or {}).get("detalle") or "Check Point no devolvió registros"
+            print(f"Campaña NO iniciada: falló la sincronización con Check Point: {detalle}", flush=True)
+            return {
+                "success": False,
+                "message": f"No se inició la campaña: falló la sincronización con Check Point ({detalle})",
+                "resultado": resultado,
+            }
+
         # 3. Obtener última campaña creada       
         cursor.execute("""
             SELECT
