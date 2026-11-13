@@ -34,25 +34,57 @@ descarga el documento original del Control 2 (queda registrado en su historial).
 `buzon_prciaut.py` **no se modifica**: `scripts/sox_graph_mail.py` lo importa y reutiliza
 su conexión (`abrir_buzon`), su `cred.json` y sus validaciones.
 
+## Configuración de correos: `backend/config/correos.json`
+
+Todo lo que es **correo** (remitente, dominios permitidos, destinatarios, copias y
+textos) está en un único JSON. Para agregar dominios o correos, o cambiar un texto,
+**solo se edita ese archivo**: no hay que tocar código ni reiniciar la API (se relee
+solo al guardar). Si el JSON queda mal escrito, la API conserva la última versión válida
+y lo registra en el log.
+
+- Plantilla documentada (en git): `backend/config/correos.example.json`.
+- Archivo real (fuera de git, como el `.env`): `backend/config/correos.json`.
+- Respaldo: si falta una clave se usa el `.env` (`SOX_MAIL_SENDER`,
+  `SOX_MAIL_ALLOWED_DOMAINS`, `SOX_REMINDER_TO_<n>`).
+
+| Clave | Uso |
+|---|---|
+| `remitente` | Buzón que envía (debe ser el autorizado en `cred.json`) |
+| `dominios_permitidos` | Lista de dominios; todo destinatario o copia debe pertenecer a uno |
+| `copias_generales` | CC en **todos** los correos SOX |
+| `controles.<n>.copias` | CC adicionales del control |
+| `controles.<n>.notificacion` | Botón "Enviar notificación" / recordatorio: `destinatarios`, `asunto`, `cuerpo` |
+| `controles.5.correo_formal` | Borrador prellenado del correo por evento del Control 5 |
+| `controles.7.aviso_gerentes` | Aviso de campaña: `modo_prueba` (`activo`, `destinatarios`, `nota`), `asunto`, `cuerpo` |
+
+Los cuerpos pueden ser texto o lista de líneas, y usan `{variables}` (cada bloque del
+ejemplo indica las suyas en `_variables`). Las claves que empiezan con `_` son comentarios.
+
+En `.env` quedan solo los interruptores y rutas: `SOX_MAIL_ENABLED`, `SOX_MAIL_CONTROLS`,
+`SOX_PORTAL_URL`, `SOX_GRAPH_SCRIPT`, `SOX_GRAPH_PYTHON` y opcionalmente `SOX_MAIL_CONFIG`
+(otra ruta para el JSON).
+
 ## Archivos
 
 | Archivo | Función |
 |---|---|
 | `backend/sql/sox_mail_outbox.sql` | Tabla `AUTOM.SOX_MAIL_OUTBOX` (estados y vínculo con evidencias) |
 | `backend/sql/sox_mail_outbox_c5.sql` | Agrega `EVENTO_ID` (Control 5); ejecutar después del anterior |
-| `frontend/src/components/SOX/control_5/Control5Events.jsx` | Panel "3.1 Correo del evento" en el expediente |
 | `backend/sql/sox_mail_outbox_c7.sql` | Agrega `ID_CAMPANA`, `GERENTE`, `GERENTE_KEY` (Control 7) |
-| `backend/services/sox_c7_notifications.py` | Cruce gerentes–contactos, vista previa y envío por lote |
-| `backend/routes/SOX/control_7/notifications.py` | Rutas `/sox/campaign/notifications` |
-| `backend/routes/SOX/control_7/campaigns.py` | El inicio de campaña ya no llama al mock: devuelve un resumen sin enviar |
+| `backend/services/sox/common/mail_config.py` | Lee `correos.json` |
+| `backend/services/sox/common/mail_service.py` | Validaciones, idempotencia, envío, archivado EML + PDF |
+| `backend/services/sox/common/reminder_service.py` | Notificaciones/recordatorios por control (auditados en `SOX_MAIL_OUTBOX`, `ORIGEN='RECORDATORIO'`) |
+| `backend/services/sox/control_7/notifications.py` | Aviso a gerentes del Control 7: vista previa y envío por lote |
+| `backend/routes/sox/common/mail.py` | Rutas `/sox/controls/{control}/correos...` |
+| `backend/routes/sox/common/reminders.py` | Rutas `/sox/controls/{control}/recordatorios/...` |
+| `backend/routes/sox/control_7/notifications.py` | Rutas `/sox/campaign/notifications` |
+| `backend/scripts/sox_graph_mail.py` | Worker Graph: enviar (con CC y adjuntos), ubicar en Enviados, descargar EML, diagnóstico |
+| `frontend/src/services/sox/common/controlMail.js` | Cliente API |
+| `frontend/src/components/SOX/common/ControlMailPanel.jsx` | Formulario y tabla de correos enviados |
+| `frontend/src/components/SOX/common/ControlReminderPanel.jsx` | Panel de notificación (vista previa y envío) |
+| `frontend/src/components/SOX/common/ControlWorkspace.jsx` | Paneles en Evidencias (botón de notificación en el Control 1; correo formal en 1, 2 y 3) |
+| `frontend/src/components/SOX/control_5/Control5Events.jsx` | Panel "3.1 Correo del evento" en el expediente |
 | `frontend/src/components/SOX/control_7/CampaignNotifications.jsx` | Panel "Notificación a gerentes" en Campañas |
-| `backend/scripts/sox_graph_mail.py` | Worker Graph: enviar con adjuntos, ubicar en Enviados, descargar EML, diagnóstico |
-| `backend/services/sox_mail_service.py` | Validaciones, idempotencia, envío, archivado EML + PDF |
-| `backend/routes/SOX/core/mail.py` | Rutas `/sox/controls/{control}/correos...` |
-| `backend/routes/sox.py` | Registro del router (2 líneas) |
-| `frontend/src/services/sox/controlMail.js` | Cliente API |
-| `frontend/src/components/SOX/ControlMailPanel.jsx` | Formulario y tabla de correos enviados |
-| `frontend/src/components/SOX/ControlWorkspace.jsx` | Muestra el panel en Evidencias de los Controles 1, 2 y 3; botón de descarga del plan C2 en C3 |
 
 ## Instalación en el servidor
 
@@ -67,12 +99,12 @@ su conexión (`abrir_buzon`), su `cred.json` y sus validaciones.
 4. **Permisos de archivos**: el usuario que ejecuta Uvicorn debe poder leer
    `buzon_prciaut.py` y `cred.json`, y **escribir** en la carpeta del token
    (`token_dir` de `cred.json`, por defecto la del script, archivo `o365_token.txt`).
-5. **Variables en `backend/.env`** (dejar `SOX_MAIL_ENABLED=false` hasta la prueba):
+5. **Correos**: copiar `backend/config/correos.example.json` a `backend/config/correos.json`
+   y completar remitente, dominios, destinatarios y copias.
+6. **Variables en `backend/.env`** (dejar `SOX_MAIL_ENABLED=false` hasta la prueba):
 
    ```
    SOX_MAIL_ENABLED=false
-   SOX_MAIL_SENDER=<buzón autorizado>
-   SOX_MAIL_ALLOWED_DOMAINS=<dominios corporativos separados por coma>
    SOX_MAIL_CONTROLS=1,2,3,5,7
    SOX_PORTAL_URL=https://<servidor>:5173   # enlace del portal en el aviso del Control 7 (opcional)
    SOX_MAIL_MAX_ATTACH_MB=3
@@ -81,11 +113,11 @@ su conexión (`abrir_buzon`), su `cred.json` y sus validaciones.
    SOX_GRAPH_PYTHON=<ruta absoluta del python que tiene instalado O365>
    # Opcional: SOX_GRAPH_CREDENTIALS=<ruta absoluta de otro cred.json>
    ```
-   Sin `SOX_MAIL_ALLOWED_DOMAINS` el envío queda bloqueado (no se permite enviar a
-   cualquier dirección).
-6. **Dependencias**: el backend ya usa `reportlab` (Control 6) y `python-multipart`
+   Sin dominios permitidos (`correos.json` o `SOX_MAIL_ALLOWED_DOMAINS`) el envío queda
+   bloqueado (no se permite enviar a cualquier dirección).
+7. **Dependencias**: el backend ya usa `reportlab` (Control 6) y `python-multipart`
    (carga de evidencias). No se agregan paquetes nuevos.
-7. Reiniciar el backend y compilar/publicar el frontend con el procedimiento habitual.
+8. Reiniciar el backend y compilar/publicar el frontend con el procedimiento habitual.
 
 ## Diagnóstico de permisos (no envía correos)
 
