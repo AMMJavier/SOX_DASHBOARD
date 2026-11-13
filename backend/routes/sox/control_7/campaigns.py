@@ -424,6 +424,8 @@ def start_campaign():
             from services.sox.control_7.manager_contact_sync import sincronizar
             contactos = sincronizar()
         else:
+            print("[SOX CONTACTOS] Sincronización LDAP OMITIDA: sincronizar_contactos_ldap=false en correos.json; "
+                  "se conservan los correos actuales de SOX_GERENTES_CONTACTO", flush=True)
             contactos = {"omitido": True,
                          "motivo": "sincronizar_contactos_ldap=false en correos.json: se conservan los correos actuales"}
 

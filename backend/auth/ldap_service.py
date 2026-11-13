@@ -62,8 +62,11 @@ def get_user_email_by_cn(nombre):
     svc_user = os.getenv("LDAP_SERVICE_USER", "")
     svc_pass = os.getenv("LDAP_SERVICE_PASSWORD", "")
     if server is None or not all((base, svc_user, svc_pass)):
+        faltan = [n for n, v in (("LDAP_SERVER", server), ("LDAP_BASE_DN", base),
+                                 ("LDAP_SERVICE_USER", svc_user), ("LDAP_SERVICE_PASSWORD", svc_pass)) if not v]
+        print(f"[SOX LDAP] Búsqueda de {nombre!r} omitida: faltan en .env {faltan}", flush=True)
         return None
- 
+
     try:
         conn = Connection(
             server,
@@ -74,6 +77,8 @@ def get_user_email_by_cn(nombre):
         )
 
         if not conn.bind():
+            # No se imprime la contraseña: solo el usuario de servicio y el resultado del bind.
+            print(f"[SOX LDAP] Bind FALLIDO con la cuenta de servicio {svc_user!r}: {conn.result.get('description')}", flush=True)
             return None
 
         try:
@@ -85,6 +90,8 @@ def get_user_email_by_cn(nombre):
             )
 
             if len(conn.entries) != 1:
+                print(f"[SOX LDAP] cn={nombre!r}: {len(conn.entries)} resultado(s) en {base!r} "
+                      f"({'no existe con ese nombre' if not conn.entries else 'nombre ambiguo, más de una cuenta'})", flush=True)
                 return None
             e = conn.entries[0]
             return {
@@ -96,7 +103,8 @@ def get_user_email_by_cn(nombre):
         finally:
             conn.unbind()
 
-    except Exception:
+    except Exception as exc:
+        print(f"[SOX LDAP] Error consultando cn={nombre!r}: {type(exc).__name__}: {exc}", flush=True)
         logger.exception("No se pudo consultar correo en LDAP")
         return None
  
