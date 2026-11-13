@@ -30,10 +30,15 @@ sqlnet.ora
 cwallet.sso
 ewallet.p12
 
-# Scripts de prueba con credenciales/IPs internas hardcodeadas
-backend/auth/test_ldap.py
-backend/database/test_insert.py
+# Scripts locales con credenciales/IPs internas hardcodeadas
 exportar_vpn_ldap.py
+
+# Configuración real de correos (se sube solo backend/config/correos.example.json)
+backend/config/correos.json
+
+# Documentos de trabajo de Office
+*.docx
+~$*
 
 # ---------------------------------------------------------------------
 # 2. DATOS CONFIDENCIALES (usuarios, VPN, LDAP, evidencias, exports)
