@@ -158,13 +158,19 @@ def _contacts(db):
 
 
 def _notifications(db, campaign_id):
+    """Intentos de aviso de la campaña, SOLO del modo vigente.
+
+    Los envíos de prueba (asunto "[PRUEBA]...") se cuentan aparte de los reales: así una
+    prueba nunca marca a un gerente como notificado ni le impide recibir su aviso real.
+    """
     rows = db.execute(text("""
         SELECT ID AS "id", GERENTE_KEY AS "key", ESTADO AS "estado", DESTINATARIOS AS "correo",
                DETALLE AS "detalle", FECHA_SOLICITUD AS "fecha_solicitud", FECHA_ENVIO AS "fecha_envio"
           FROM AUTOM.SOX_MAIL_OUTBOX
          WHERE ORIGEN = 'CAMPANA' AND ID_CAMPANA = :p_camp
+           AND (CASE WHEN ASUNTO LIKE '[PRUEBA]%' THEN 1 ELSE 0 END) = :p_test
          ORDER BY ID
-    """), {"p_camp": campaign_id}).mappings()
+    """), {"p_camp": campaign_id, "p_test": 1 if modo_prueba() else 0}).mappings()
     result = {}
     for row in rows:
         result.setdefault(row["key"], []).append(dict(row))
@@ -181,6 +187,13 @@ def _notification_state(attempts):
     if "PENDIENTE" in states:
         return "PENDIENTE", len(attempts)
     return "FALLIDO", len(attempts)
+
+
+def _can_send(state):
+    """Real: un aviso por gerente (solo se reintenta si falló). Prueba: se puede repetir."""
+    if modo_prueba():
+        return state != "PENDIENTE"
+    return state in (None, "FALLIDO")
 
 
 def _fmt(value):
@@ -212,7 +225,7 @@ def preview(db):
             "notificacion": state, "intentos": count,
             "detalle": last["detalle"] if last else None,
             "fecha_envio": _fmt(last["fecha_envio"]) if last else None,
-            "enviable": contact_state == READY and state in (None, "FALLIDO"),
+            "enviable": contact_state == READY and _can_send(state),
         })
     summary = {
         "gerentes": len(items),
@@ -355,7 +368,7 @@ def preview_one(db, campaign, key, item):
     if contact_state != READY:
         return None
     state, count = _notification_state(_notifications(db, campaign["id"]).get(key, []))
-    if state not in (None, "FALLIDO"):
+    if not _can_send(state):
         return None
     return {"correo": emails, "intento": count + 1}
 
@@ -366,7 +379,9 @@ def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None)
     copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     email = ", ".join(emails)
     correlation = uuid4().hex
-    idem = f"C7-{campaign['id']}-{_key_hash(item['key'])}-{attempt}"
+    # Real: la clave por intento impide avisos duplicados. Prueba: clave única para poder repetir.
+    idem = (f"C7P-{campaign['id']}-{_key_hash(item['key'])}-{correlation[:12]}" if modo_prueba()
+            else f"C7-{campaign['id']}-{_key_hash(item['key'])}-{attempt}")
     try:
         result = db.execute(text("""
             INSERT INTO AUTOM.SOX_MAIL_OUTBOX

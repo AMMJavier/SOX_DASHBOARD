@@ -19,6 +19,7 @@ import History from "../pages/SOX/Control_7/History";
 import Reports from "../pages/SOX/Control_7/Reports";
 import Exceptions from "../pages/SOX/Control_7/Exceptions";
 import AuditLogs from "../pages/SOX/Control_7/AuditLogs";
+import UnparametrizedVpnsPage from "../pages/SOX/Control_7/UnparametrizedVpnsPage";
 
 // Configuración SOX
 import Settings from "../pages/SOX/Control_7/Settings";
@@ -194,6 +195,11 @@ export const soxRoutes = (
       <Route
         path="settings"
         element={<PrivateRoute allowedRoles={["administrador"]}><Settings /></PrivateRoute>}
+      />
+
+      <Route
+        path="vpn-sin-parametrizar"
+        element={<PrivateRoute allowedRoles={["administrador", "desarrollador"]}><UnparametrizedVpnsPage /></PrivateRoute>}
       />
 
       <Route
