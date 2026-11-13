@@ -4,6 +4,20 @@ import Pagination from "../../../components/common/Pagination";
 import { api } from "../../../services/api";
 import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
 import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
+import { AUDIT_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
+import { registerExport } from "../../../utils/sox/control_7/registerExport";
+
+async function exportLogs(kind, rows) {
+  try {
+    const n = kind === "Excel"
+      ? await exportToExcel(rows, "logs-control7-sox.xlsx", AUDIT_COLUMNS, "Logs")
+      : exportToPdf(rows, "logs-control7-sox.pdf", AUDIT_COLUMNS, "Logs de auditoría - Control 7");
+    registerExport({ type: kind, module: "Logs", description: "Logs de auditoría del Control 7", records: n });
+  } catch (error) {
+    console.error(`Error exportando logs a ${kind}:`, error);
+    window.alert(`No se pudo generar el archivo ${kind}.`);
+  }
+}
 
 
 export default function AuditLogs() {
@@ -151,18 +165,14 @@ export default function AuditLogs() {
             </div>
 
             <button
-              onClick={()=>
-                exportToExcel(filteredLogs)
-              }
+              onClick={() => exportLogs("Excel", filteredLogs)}
               className="h-11 rounded-lg bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-700"
             >
               Excel
             </button>
 
             <button
-              onClick={()=>
-                exportToPdf(filteredLogs)
-              }
+              onClick={() => exportLogs("PDF", filteredLogs)}
               className="h-11 rounded-lg bg-red-600 px-5 text-sm font-bold text-white hover:bg-red-700"
             >
               PDF

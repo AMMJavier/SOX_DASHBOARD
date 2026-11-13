@@ -1,37 +1,29 @@
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { saveAs } from "file-saver";
 
-/** Exportación SOX compatible con ExcelJS (sin dependencia SheetJS vulnerable). */
-export async function exportToExcel(data, fileName = "reporte-sox.xlsx") {
-  const filteredData = (Array.isArray(data) ? data : []).filter(
-    (item) => String(item.decision || "").toLowerCase() !== "mantener"
-  );
+/**
+ * Exporta a Excel exactamente las filas recibidas (las que se ven en pantalla, con sus filtros)
+ * usando las columnas de esa pantalla (ver exportColumns.js). Sin dependencia SheetJS vulnerable.
+ */
+export async function exportToExcel(data, fileName = "reporte-sox.xlsx", columns, sheetName = "SOX") {
+  const rows = Array.isArray(data) ? data : [];
+  if (!Array.isArray(columns) || !columns.length) throw new Error("exportToExcel requiere las columnas de la pantalla");
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("SOX");
-  worksheet.columns = [
-    { header: "REQ", key: "req", width: 24 },
-    { header: "Nombre VPN", key: "vpn", width: 42 },
-    { header: "Gerente Asignado", key: "manager", width: 36 },
-    { header: "Estado", key: "status", width: 20 },
-    { header: "Decisión", key: "decision", width: 20 },
-    { header: "Observación", key: "observation", width: 55 },
-  ];
-  // Mantener todos los valores como texto e impedir interpretación de fórmulas.
+  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31));
+  worksheet.columns = columns.map((c, index) => ({ header: c.header, key: `c${index}`, width: c.width || 20 }));
+  // Todo como texto e impedir que Excel interprete fórmulas (=, +, @, -).
   const plain = (value) => {
-    const text = String(value ?? "-");
-    return /^[=+@\-\t\r\n]/.test(text) ? `'${text}` : text;
+    const s = String(value ?? "-");
+    return /^[=+@\-\t\r\n]/.test(s) && s !== "-" ? `'${s}` : s;
   };
-  filteredData.forEach((item) => {
-    worksheet.addRow({
-      req: plain(item.req), vpn: plain(item.nombre_vpn), manager: plain(item.manager),
-      status: plain(item.status), decision: plain(item.decision),
-      observation: plain(item.observation),
-    });
+  rows.forEach((item) => {
+    worksheet.addRow(Object.fromEntries(columns.map((c, index) => [`c${index}`, plain(c.value(item))])));
   });
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
-  worksheet.autoFilter = { from: "A1", to: "F1" };
+  worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
   worksheet.views = [{ state: "frozen", ySplit: 1 }];
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), fileName);
+  return rows.length;
 }

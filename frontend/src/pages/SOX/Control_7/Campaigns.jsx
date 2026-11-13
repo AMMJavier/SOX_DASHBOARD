@@ -5,6 +5,8 @@ import Pagination from "../../../components/common/Pagination";
 import { api } from "../../../services/api";
 import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
 import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
+import { CAMPAIGN_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
+import { registerExport } from "../../../utils/sox/control_7/registerExport";
 import { closeActiveCampaign, getCampaignValidations } from "../../../services/sox/control_7/campaignService";
 import CampaignNotifications from "../../../components/SOX/control_7/CampaignNotifications";
 
@@ -159,7 +161,8 @@ return (
             <button
               onClick={async () => {
                 try {
-                  await exportToExcel(filteredValidations);
+                  const n = await exportToExcel(filteredValidations, "campana-activa-sox.xlsx", CAMPAIGN_COLUMNS, "Campaña activa");
+                  registerExport({ type: "Excel", module: "Campañas", description: "Validaciones de campaña activa", records: n });
                 } catch (error) {
                   console.error("Error exportando campaña a Excel:", error);
                   window.alert("No se pudo generar el archivo Excel.");
@@ -172,7 +175,15 @@ return (
 
 
             <button
-              onClick={() => exportToPdf(filteredValidations)}
+              onClick={() => {
+                try {
+                  const n = exportToPdf(filteredValidations, "campana-activa-sox.pdf", CAMPAIGN_COLUMNS, "Validaciones de campaña activa - Control 7");
+                  registerExport({ type: "PDF", module: "Campañas", description: "Validaciones de campaña activa", records: n });
+                } catch (error) {
+                  console.error("Error exportando campaña a PDF:", error);
+                  window.alert("No se pudo generar el archivo PDF.");
+                }
+              }}
               className="h-11 rounded-lg bg-red-600 px-5 text-sm font-bold text-white hover:bg-red-700"
             >
               PDF

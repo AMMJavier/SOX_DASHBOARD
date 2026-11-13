@@ -6,6 +6,7 @@ import { getHistory, getHistoryFilters } from "../../../services/sox/control_7/h
 import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
 import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
 import { registerExport } from "../../../utils/sox/control_7/registerExport";
+import { HISTORY_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
 
 export default function History() {
   const [history, setHistory] = useState([]);
@@ -141,7 +142,7 @@ const paginatedHistory = filteredHistory.slice(
             <button
               onClick={async () => {
                 try {
-                  await exportToExcel(filteredHistory);
+                  await exportToExcel(filteredHistory, "historico-sox.xlsx", HISTORY_COLUMNS, "Histórico");
                   registerDownload("Excel");
                 } catch (error) {
                   console.error("Error exportando histórico a Excel:", error);
@@ -155,8 +156,13 @@ const paginatedHistory = filteredHistory.slice(
 
             <button
               onClick={() => {
-                exportToPdf(filteredHistory);
-                registerDownload("PDF");
+                try {
+                  exportToPdf(filteredHistory, "historico-sox.pdf", HISTORY_COLUMNS, "Histórico de campañas - Control 7");
+                  registerDownload("PDF");
+                } catch (error) {
+                  console.error("Error exportando histórico a PDF:", error);
+                  window.alert("No se pudo generar el archivo PDF.");
+                }
               }}
               className="h-11 rounded-lg bg-red-600 px-5 text-sm font-bold text-white hover:bg-red-700"
             >

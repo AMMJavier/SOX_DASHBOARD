@@ -8,7 +8,7 @@ export function registerExport({ type, module, description, records }) {
     module,
     description,
     records,
-    user: user?.name || "Usuario",
+    user: user?.username || user?.name || "Usuario",
     date: new Date().toLocaleString(),
   };
 
