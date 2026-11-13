@@ -29,6 +29,37 @@ _batch_lock = threading.Lock()
 
 READY, NO_CONTACT, AMBIGUOUS, DOMAIN = "LISTO", "SIN_CONTACTO", "AMBIGUO", "DOMINIO_NO_PERMITIDO"
 
+# ---------------------------------------------------------------- MODO PRUEBA
+# Mientras esta lista tenga correos, los avisos NO usan AUTOM.SOX_GERENTES_CONTACTO:
+# el aviso de cada gerente se envía a estas direcciones, con asunto [PRUEBA] y una
+# nota indicando a qué gerente correspondía. Para usar los correos reales de Oracle,
+# dejar la lista vacía:  CORREOS_FIJOS = []
+CORREOS_FIJOS = [
+    "dmedinac@claro.com.ec",
+    "galvaram@claro.com.ec",
+]
+
+
+def modo_prueba():
+    return bool(CORREOS_FIJOS)
+
+
+def _resolve_contact(contacts, key):
+    """Devuelve (estado_contacto, lista_de_correos) para un gerente."""
+    if modo_prueba():
+        emails = list(CORREOS_FIJOS)
+    else:
+        found = list(contacts.get(key, {}).values())
+        if not found:
+            return NO_CONTACT, []
+        if len(found) > 1:
+            return AMBIGUOUS, []
+        emails = found
+    # Las direcciones fijas también pasan por la lista blanca de dominios.
+    domains = mail.allowed_domains()
+    valid = all(mail.EMAIL_RE.fullmatch(e) and e.rsplit("@", 1)[1].lower() in domains for e in emails)
+    return (READY if valid else DOMAIN), emails
+
 
 # ---------------------------------------------------------------- utilidades
 
@@ -135,20 +166,12 @@ def preview(db):
     if not campaign:
         return {"campana": None, "gerentes": [], "resumen": None, "en_proceso": batch_running()}
     managers, without_manager, total = _campaign_managers(db)
-    contacts = _contacts(db)
+    contacts = {} if modo_prueba() else _contacts(db)
     sent = _notifications(db, campaign["id"])
-    domains = mail.allowed_domains()
     items = []
     for key, item in sorted(managers.items(), key=lambda kv: kv[1]["gerente"]):
-        emails = list(contacts.get(key, {}).values())
-        if not emails:
-            contact_state, email = NO_CONTACT, None
-        elif len(emails) > 1:
-            contact_state, email = AMBIGUOUS, None
-        else:
-            email = emails[0]
-            valid = mail.EMAIL_RE.fullmatch(email) and email.rsplit("@", 1)[1].lower() in domains
-            contact_state = READY if valid else DOMAIN
+        contact_state, emails = _resolve_contact(contacts, key)
+        email = ", ".join(emails) if emails else None
         attempts = sent.get(key, [])
         state, count = _notification_state(attempts)
         last = attempts[-1] if attempts else None
@@ -174,7 +197,8 @@ def preview(db):
         "registros_sin_gerente": without_manager,
     }
     return {"campana": {k: _fmt(v) for k, v in campaign.items()}, "gerentes": items, "resumen": summary,
-            "envio_habilitado": mail._env_bool("SOX_MAIL_ENABLED"), "en_proceso": batch_running()}
+            "envio_habilitado": mail._env_bool("SOX_MAIL_ENABLED"), "en_proceso": batch_running(),
+            "modo_prueba": modo_prueba(), "correos_prueba": list(CORREOS_FIJOS)}
 
 
 # ---------------------------------------------------------------- mensaje
@@ -275,20 +299,23 @@ def run_batch(campaign_id, claves, user_id, username):
 
 
 def preview_one(db, campaign, key, item):
-    emails = list(_contacts(db).get(key, {}).values())
-    if len(emails) != 1:
-        return None
-    email = emails[0]
-    if not mail.EMAIL_RE.fullmatch(email) or email.rsplit("@", 1)[1].lower() not in mail.allowed_domains():
+    contacts = {} if modo_prueba() else _contacts(db)
+    contact_state, emails = _resolve_contact(contacts, key)
+    if contact_state != READY:
         return None
     state, count = _notification_state(_notifications(db, campaign["id"]).get(key, []))
     if state not in (None, "FALLIDO"):
         return None
-    return {"correo": email, "intento": count + 1}
+    return {"correo": emails, "intento": count + 1}
 
 
-def _send_one(db, campaign, item, email, attempt, user_id, username):
+def _send_one(db, campaign, item, emails, attempt, user_id, username):
     subject, body = compose(campaign, item["gerente"], item["vpn"])
+    if modo_prueba():
+        subject = f"[PRUEBA] {subject}"[:200]
+        body = (f"*** CORREO DE PRUEBA ***\nEste aviso corresponde al gerente: {item['gerente']}.\n"
+                f"No se envió al gerente: el sistema está en modo prueba con destinatarios fijos.\n\n{body}")
+    email = ", ".join(emails)
     correlation = uuid4().hex
     idem = f"C7-{campaign['id']}-{_key_hash(item['key'])}-{attempt}"
     try:
@@ -316,7 +343,7 @@ def _send_one(db, campaign, item, email, attempt, user_id, username):
     footer = f"\n\n--\nEnviado desde SOX Dashboard por {username}. Referencia SOX: C7-{outbox_id}."
     try:
         code, out = mail._run_worker("enviar", {
-            "emisor": mail.sender(), "destinatarios": [email], "cc": [], "asunto": subject,
+            "emisor": mail.sender(), "destinatarios": list(emails), "cc": [], "asunto": subject,
             "cuerpo": body + footer, "formato": "texto", "correlacion": correlation, "adjuntos": [],
         }, timeout=120)
     except subprocess.TimeoutExpired:
