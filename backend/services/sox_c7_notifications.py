@@ -37,6 +37,7 @@ READY, NO_CONTACT, AMBIGUOUS, DOMAIN = "LISTO", "SIN_CONTACTO", "AMBIGUO", "DOMI
 CORREOS_FIJOS = [
     "dmedinac@claro.com.ec",
     "galvaram@claro.com.ec",
+    "mirandaalj@hitss.com",
 ]
 
 
