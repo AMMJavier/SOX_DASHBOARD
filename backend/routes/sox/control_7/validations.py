@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from auth.dependencies import get_current_user
+from models import Usuario
 
 
 from database.oracle_connection import OracleConnection
@@ -48,6 +51,32 @@ class ValidationConfirmAllRequest(BaseModel):
 print("MODELO CONFIRM ALL CARGADO DESDE validations.py")
 print(ValidationConfirmAllRequest.model_json_schema())
 
+
+
+@router.get("/managers/mine")
+def get_my_managers(current: Usuario = Depends(get_current_user)):
+    """Nombres de gerente (tal como vienen de Check Point) vinculados al usuario en sesión.
+
+    El vínculo es SOX_GERENTES_CONTACTO.LDAP_CN = usuario LDAP (sAMAccountName), que llena la
+    sincronización de contactos. Así un gerente puede validar sus VPN aunque su usuario
+    (p. ej. pgalecio) no sea igual al nombre del gerente (p. ej. "TIC Paola Galecio").
+    """
+    oracle = OracleConnection()
+    try:
+        connection = oracle.connect()
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT NOMBRE_COMPLETO
+              FROM AUTOM.SOX_GERENTES_CONTACTO
+             WHERE LOWER(TRIM(LDAP_CN)) = LOWER(TRIM(:usuario)) AND ACTIVO = 1
+        """, {"usuario": current.username})
+        names = [row[0] for row in cursor.fetchall() if row[0]]
+        print(f"[SOX GERENTES] Usuario {current.username!r} vinculado a: {names or 'ningún gerente'}", flush=True)
+        return {"usuario": current.username, "gerentes": names}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo consultar los gerentes del usuario: {e}")
+    finally:
+        oracle.close()
 
 
 @router.get("/managers")

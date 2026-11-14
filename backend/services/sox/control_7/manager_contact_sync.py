@@ -169,7 +169,9 @@ def sincronizar():
             encontrados_ldap += 1
 
             try:
-                guardar_contacto(resultado)
+                # NOMBRE_COMPLETO = nombre del gerente tal como viene de Check Point: así cruza con
+                # CHECKPOINT_TRANSFORM.GERENTE aunque en LDAP se haya encontrado sin el prefijo de área.
+                guardar_contacto({**resultado, "nombre": nombre})
                 guardados_bd += 1
                 log(f"[{indice}/{len(gerentes)}] OK      {nombre!r} -> correo={resultado['correo']} "
                     f"ldap={resultado.get('username')} ({time.monotonic() - t0:.2f}s)")

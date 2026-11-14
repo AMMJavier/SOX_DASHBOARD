@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import Pagination from "../../../components/common/Pagination";
-import { getManagers } from "../../../services/sox/control_7/managerService";
+import { getManagers, getMyManagers } from "../../../services/sox/control_7/managerService";
+
+// Compara nombres de gerente sin acentos, mayúsculas, espacios dobles ni NBSP (igual que el backend).
+const normalizeManager = (value) => String(value || "")
+  .replace(/ /g, " ").normalize("NFKD").replace(/[̀-ͯ]/g, "")
+  .replace(/\s+/g, " ").trim().toLowerCase();
 
 import {
   getValidationsByManager,
@@ -24,9 +29,27 @@ export default function ManagerDashboard() {
   const [campaignExpired,setCampaignExpired] = useState(false);
   const [campaignStatus,setCampaignStatus] = useState(null);
 
+  // Gerentes vinculados al usuario en sesión (SOX_GERENTES_CONTACTO.LDAP_CN = su usuario LDAP).
+  const [myManagers, setMyManagers] = useState([]);
+
+  useEffect(() => {
+    getMyManagers().then(setMyManagers).catch(() => setMyManagers([]));
+  }, []);
+
+  // Un gerente solo valida las VPN asignadas a SU nombre de gerente; administración ve todas.
+  // Antes se comparaba con el usuario de sesión (p. ej. "pgalecio" vs "TIC Paola Galecio"), que nunca coincidía.
   const isOwnManager =
-  loggedUser?.rol !== "gerencial" ||
-  selectedManager === loggedUser?.name;
+    loggedUser?.rol !== "gerencial" ||
+    normalizeManager(selectedManager) === normalizeManager(loggedUser?.name) ||
+    myManagers.some((name) => normalizeManager(name) === normalizeManager(selectedManager));
+
+  // Si el gerente tiene un único nombre asignado, se selecciona solo al entrar
+  // (tomando la opción exacta de la lista para que coincida con el desplegable).
+  useEffect(() => {
+    if (loggedUser?.rol !== "gerencial" || selectedManager || myManagers.length !== 1) return;
+    const own = managers.find((m) => normalizeManager(m.name) === normalizeManager(myManagers[0]));
+    if (own) setSelectedManager(own.name);
+  }, [myManagers, managers]);
 
 useEffect(()=>{
 async function loadCampaignStatus(){

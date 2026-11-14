@@ -53,6 +53,20 @@ def authenticate_ldap(username: str, password: str) -> bool:
         logger.exception("No se pudo validar la autenticación LDAP")
         return False
  
+def _name_variants(nombre):
+    """Nombre completo y, si empieza con un prefijo de área (palabras cortas en MAYÚSCULAS
+    como TIC, COM, FIN, SAC, "T H"), el nombre sin ese prefijo."""
+    nombre = " ".join(str(nombre).replace("\xa0", " ").split())
+    variantes = [nombre]
+    partes = nombre.split(" ")
+    i = 0
+    while i < len(partes) - 2 and partes[i].isupper() and len(partes[i]) <= 4 and partes[i].isalpha():
+        i += 1
+    if 0 < i:
+        variantes.append(" ".join(partes[i:]))
+    return variantes
+
+
 def get_user_email_by_cn(nombre):
     if not nombre:
         return None
@@ -82,23 +96,29 @@ def get_user_email_by_cn(nombre):
             return None
 
         try:
-            conn.search(
-                search_base=base,
-                search_filter=f"(cn={escape_filter_chars(nombre)})",
-                attributes=["cn", "mail", "sAMAccountName"],
-                size_limit=2,
-            )
-
-            if len(conn.entries) != 1:
-                print(f"[SOX LDAP] cn={nombre!r}: {len(conn.entries)} resultado(s) en {base!r} "
+            # 1ro el nombre tal cual; si no aparece, sin el prefijo del área de Check Point
+            # ("TIC Paola Galecio" -> "Paola Galecio", "T H Oscar Salas" -> "Oscar Salas").
+            for variante in _name_variants(nombre):
+                conn.search(
+                    search_base=base,
+                    search_filter=f"(|(cn={escape_filter_chars(variante)})(displayName={escape_filter_chars(variante)}))",
+                    attributes=["cn", "mail", "sAMAccountName"],
+                    size_limit=2,
+                )
+                if len(conn.entries) == 1:
+                    e = conn.entries[0]
+                    if variante != nombre:
+                        print(f"[SOX LDAP] {nombre!r} encontrado como {variante!r} (sin prefijo de área)", flush=True)
+                    return {
+                        "nombre": str(e.cn),
+                        "correo": str(e.mail) if e.mail else None,
+                        "username": str(e.sAMAccountName) if e.sAMAccountName else None,
+                    }
+                print(f"[SOX LDAP] cn/displayName={variante!r}: {len(conn.entries)} resultado(s) en {base!r} "
                       f"({'no existe con ese nombre' if not conn.entries else 'nombre ambiguo, más de una cuenta'})", flush=True)
-                return None
-            e = conn.entries[0]
-            return {
-                "nombre": str(e.cn),
-                "correo": str(e.mail) if e.mail else None,
-                "username": str(e.sAMAccountName) if e.sAMAccountName else None,
-            }
+                if len(conn.entries) > 1:
+                    return None  # Ambiguo: no se adivina la cuenta.
+            return None
 
         finally:
             conn.unbind()
