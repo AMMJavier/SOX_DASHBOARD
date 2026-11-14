@@ -496,7 +496,7 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
 
 # ---------------------------------------------------------------- archivado
 
-def archive_mail(db, *, control, outbox_id, user):
+def _archive_mail_impl(db, *, control, outbox_id, user):
     row = db.execute(text("""
         SELECT ANIO AS "anio", SEMESTRE AS "semestre", TIPO_EVIDENCIA AS "tipo_evidencia",
                EMISOR AS "emisor", ASUNTO AS "asunto", CORRELACION AS "correlacion",
@@ -713,3 +713,21 @@ def eml_to_pdf(eml_bytes, *, outbox_id, control):
     if not content.startswith(b"%PDF-") or len(content) > MAX_BYTES:
         raise RuntimeError("PDF del correo inválido o demasiado grande")
     return content
+
+
+def archive_mail(db, *, control, outbox_id, user):
+    """Archiva la copia enviada (EML + PDF) como evidencia; con trazas en consola."""
+    start = time.monotonic()
+    console(f"ARCHIVADO Control {control} #{outbox_id} INICIO | usuario={getattr(user, 'username', None)}")
+    try:
+        result = _archive_mail_impl(db, control=control, outbox_id=outbox_id, user=user)
+    except HTTPException as exc:
+        console(f"ARCHIVADO Control {control} #{outbox_id} NO COMPLETADO tras {elapsed(start)} | HTTP {exc.status_code}: {exc.detail}")
+        raise
+    except Exception as exc:
+        console(f"ARCHIVADO Control {control} #{outbox_id} ERROR tras {elapsed(start)} | {type(exc).__name__}: {exc}")
+        raise
+    estado = (result or {}).get("estado")
+    console(f"ARCHIVADO Control {control} #{outbox_id} -> {estado} en {elapsed(start)}"
+            + (f" | {result.get('detalle')}" if result and result.get("detalle") else ""))
+    return result

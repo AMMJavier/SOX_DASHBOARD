@@ -96,12 +96,20 @@ export default function ControlMailPanel({
     if (!window.confirm(summary)) return;
     setBusy(true);
     setFeedback(null);
+    // Traza en la consola del navegador (F12): qué se envía al servidor.
+    console.info(`[SOX CORREO] Control ${control}: enviando`, {
+      anio: Number(year), semestre: semester, tipo: draft.tipo, para: draft.para, cc: draft.cc,
+      asunto: draft.asunto, adjuntosEquipo: files.length, adjuntosRepositorio: selectedRepo.map((f) => f.id), evento: eventId,
+    });
     try {
+      // Antes: "semestre" (variable inexistente) -> ReferenceError "semestre is not defined"
+      // y el correo nunca llegaba al servidor. El prop del componente es "semester".
       const result = await sendControlMail(control, {
-        anio: Number(year), semestre, tipo: draft.tipo, para: draft.para, cc: draft.cc,
+        anio: Number(year), semestre: semester, tipo: draft.tipo, para: draft.para, cc: draft.cc,
         asunto: draft.asunto, cuerpo: draft.cuerpo, adjuntos: files.map((f) => f.file), evidenciasIds: selectedRepo.map((f) => f.id), eventoId: eventId,
         idempotencyKey: idempotencyKey.current,
       });
+      console.info(`[SOX CORREO] Control ${control}: respuesta del servidor`, result);
       if (result.repetido) {
         setFeedback({ caution: true, text: `Esta solicitud ya había sido procesada (correo #${result.id}, ${STATUS[result.estado]?.label || result.estado}). No se envió de nuevo.` });
       } else if (result.estado === "ARCHIVADO") {
@@ -112,6 +120,7 @@ export default function ControlMailPanel({
       resetDraft();
       onArchived?.();
     } catch (e) {
+      console.error(`[SOX CORREO] Control ${control}: error al enviar (HTTP ${e.status ?? "sin respuesta"})`, e);
       // 502: Graph rechazó el envío (no salió). Se permite un nuevo intento con otra clave.
       if (e.status === 502) idempotencyKey.current = newIdempotencyKey();
       setFeedback({ caution: true, text: e.message || "No se pudo enviar el correo." });
@@ -125,10 +134,15 @@ export default function ControlMailPanel({
     setBusy(true);
     setFeedback(null);
     try {
+      console.info(`[SOX CORREO] Control ${control}: reintentando archivado del correo #${id}`);
       const result = await archiveControlMail(control, id);
+      console.info(`[SOX CORREO] Control ${control}: archivado #${id} ->`, result.estado, result.detalle || "");
       setFeedback({ caution: result.estado !== "ARCHIVADO", text: result.estado === "ARCHIVADO" ? `Correo #${id} archivado como evidencia.` : (result.detalle || "Archivado pendiente.") });
       onArchived?.();
-    } catch (e) { setFeedback({ caution: true, text: e.message }); }
+    } catch (e) {
+      console.error(`[SOX CORREO] Control ${control}: error al archivar #${id} (HTTP ${e.status ?? "sin respuesta"})`, e);
+      setFeedback({ caution: true, text: e.message });
+    }
     finally { setBusy(false); setRefresh((n) => n + 1); }
   }
 
