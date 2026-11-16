@@ -31,22 +31,31 @@ export default function SessionTimeout() {
     let closing = false;
     let active = true;
 
-    function close() {
+    function close(reason) {
       if (closing) return;
       closing = true;
+      console.warn(`[SOX SESION] cierre de sesión: ${reason}`);
       expireSession();
+    }
+
+    function expiredReason() {
+      if (isSessionIdleExpired()) return "15 minutos sin interacción";
+      if (isTokenExpired()) return "límite de 8 horas desde el login";
+      return null;
     }
 
     function checkSession() {
       if (closing || !getAccessToken()) return;
-      if (isSessionIdleExpired() || isTokenExpired()) close();
+      const reason = expiredReason();
+      if (reason) close(reason);
     }
 
     async function registerActivity() {
       if (closing || !getAccessToken()) return;
       // Verificar ANTES de registrar actividad para no reanimar una sesión vencida.
-      if (isSessionIdleExpired() || isTokenExpired()) {
-        close();
+      const reason = expiredReason();
+      if (reason) {
+        close(reason);
         return;
       }
       const now = Date.now();
@@ -61,9 +70,11 @@ export default function SessionTimeout() {
       const tokenAtStart = getAccessToken();
       try {
         await api.post("/auth/actividad");
+        console.info(`[SOX SESION] actividad renovada ${new Date().toLocaleTimeString()}`);
       } catch (error) {
+        console.error("[SOX SESION] no se pudo renovar la actividad", error.response?.status, error.response?.data);
         // No cerrar una sesión nueva por la respuesta tardía de una sesión anterior.
-        if (active && tokenAtStart === getAccessToken() && error.response?.status === 401) close();
+        if (active && tokenAtStart === getAccessToken() && error.response?.status === 401) close("el backend rechazó la renovación (401)");
       } finally {
         pending = false;
       }
@@ -86,6 +97,7 @@ export default function SessionTimeout() {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("storage", onStorage);
     const interval = window.setInterval(checkSession, 5000);
+    console.info("[SOX SESION] control de inactividad activo (15 min sin interacción, tope 8 h)");
     checkSession();
 
     return () => {

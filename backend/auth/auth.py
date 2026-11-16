@@ -114,11 +114,13 @@ def registrar_actividad(
         )
 
     if not refresh_session(db, session_id, current.id):
+        print(f"[SOX SESION] actividad RECHAZADA usuario={current.username} sesion={session_id[:8]}", flush=True)
         raise HTTPException(
             status_code=401,
             detail="Sesión expirada o revocada"
         )
 
+    print(f"[SOX SESION] actividad renovada usuario={current.username} sesion={session_id[:8]} (+15 min)", flush=True)
     return {"message": "Actividad registrada"}
 
 @router.post("/logout")

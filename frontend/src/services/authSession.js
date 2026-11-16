@@ -190,6 +190,7 @@ export function handleUnauthorized(
   // 401: sesión inválida o vencida.
   // 403: usuario autenticado sin permisos.
   if (responseStatus === 401 && hadToken) {
+    console.warn("[SOX SESION] el backend respondió 401: sesión vencida o revocada");
     clearSession();
 
     if (window.location.pathname !== "/login") {

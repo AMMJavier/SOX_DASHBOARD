@@ -14,6 +14,22 @@ ASSETS_ROLES = frozenset({"administrador","assets_admin", "assets_viewer", "desa
 ADMIN_ROLES = frozenset({"administrador", "assets_admin"})
 bearer_scheme = HTTPBearer(auto_error=False)
 
+def _print_session_rejection(db, session_id, username):
+    """Traza de consola: por qué Oracle no da por vigente la sesión (sin datos sensibles)."""
+    try:
+        from models import SoxSesion
+        from auth.session_service import utc_now
+        row = db.query(SoxSesion).filter(SoxSesion.session_id == session_id).first()
+        if row is None:
+            reason = "no existe en SOX_SESIONES"
+        else:
+            reason = (f"revocado={row.revocado} creado={row.creado_en} ultima_actividad={row.ultima_actividad} "
+                      f"expira={row.expira_en} ahora_utc={utc_now()}")
+        print(f"[SOX SESION] RECHAZADA usuario={username} sesion={session_id[:8]} | {reason}", flush=True)
+    except Exception as exc:  # La traza nunca debe romper la autenticación.
+        print(f"[SOX SESION] RECHAZADA usuario={username} (sin detalle: {type(exc).__name__})", flush=True)
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_oracle_db),
@@ -48,6 +64,7 @@ def get_current_user(
     )
 
     if session is None:
+        _print_session_rejection(db, session_id, username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sesión expirada o revocada",
