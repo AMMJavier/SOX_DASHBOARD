@@ -13,11 +13,16 @@ import {
 const SYNC_INTERVAL_MS = 30 * 1000;
 // Evita escribir en localStorage en cada movimiento del mouse.
 const MARK_INTERVAL_MS = 5 * 1000;
-const ACTIVITY_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "touchstart"];
+// Solo interacciones reales del usuario. No se usa "scroll": también se dispara cuando la
+// página se mueve sola al recargar datos (p. ej. la Navbar cada 30 s).
+const ACTIVITY_EVENTS = ["pointerdown", "mousemove", "keydown", "wheel", "touchstart"];
+// Chrome envía "mousemove" sin que el mouse se mueva cuando el contenido cambia debajo
+// del cursor; solo cuenta si el puntero se desplazó al menos estos píxeles.
+const MIN_MOVE_PX = 4;
 
 /**
  * Sesión por inactividad.
- *  - 15 minutos SIN interacción (mouse, teclado, scroll, toque) -> cierra sesión.
+ *  - 15 minutos SIN interacción (clic, mover el mouse, teclado, rueda, toque) -> cierra sesión.
  *  - Mientras el usuario interactúa, renueva la sesión en Oracle (POST /auth/actividad).
  *  - Límite absoluto: el JWT vence 8 horas después del login (JWT_EXPIRE_MINUTES) aunque
  *    haya actividad.
@@ -50,8 +55,24 @@ export default function SessionTimeout() {
       if (reason) close(reason);
     }
 
-    async function registerActivity() {
+    let lastX = null;
+    let lastY = null;
+
+    function isRealInteraction(event) {
+      if (!event.isTrusted) return false; // eventos generados por código
+      if (event.type !== "mousemove") return true;
+      // El mousemove artificial llega con movementX/Y en 0 y en la misma posición.
+      if (!event.movementX && !event.movementY) return false;
+      const { screenX: x, screenY: y } = event;
+      if (lastX !== null && Math.abs(x - lastX) < MIN_MOVE_PX && Math.abs(y - lastY) < MIN_MOVE_PX) return false;
+      lastX = x;
+      lastY = y;
+      return true;
+    }
+
+    async function registerActivity(event) {
       if (closing || !getAccessToken()) return;
+      if (event && !isRealInteraction(event)) return;
       // Verificar ANTES de registrar actividad para no reanimar una sesión vencida.
       const reason = expiredReason();
       if (reason) {
@@ -70,7 +91,7 @@ export default function SessionTimeout() {
       const tokenAtStart = getAccessToken();
       try {
         await api.post("/auth/actividad");
-        console.info(`[SOX SESION] actividad renovada ${new Date().toLocaleTimeString()}`);
+        console.info(`[SOX SESION] actividad renovada ${new Date().toLocaleTimeString()} (evento: ${event?.type || "-"})`);
       } catch (error) {
         console.error("[SOX SESION] no se pudo renovar la actividad", error.response?.status, error.response?.data);
         // No cerrar una sesión nueva por la respuesta tardía de una sesión anterior.
