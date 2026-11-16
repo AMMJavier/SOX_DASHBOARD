@@ -92,7 +92,7 @@ const controlConfig = {
 
     7:{
         id:"7",
-        name:"Control 7 - Evidencias VPN Internas y Externas",
+        name:"Control 7 - Evidencias VPN Externas",
         path:"/SOX/Controls/Control_7/dashboard",
 
         type:"campaign",
