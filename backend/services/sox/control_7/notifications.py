@@ -135,14 +135,17 @@ def _vpns_by_manager(db):
 
 
 def _vpn_table(vpns):
-    """Tabla en texto plano (el aviso se envía en formato texto)."""
+    """Lista de VPN del gerente, una por línea (el aviso se envía en texto).
+
+    Sin encabezado ni línea de guiones: en Outlook (letra proporcional) las
+    columnas armadas con espacios salían desalineadas.
+    """
     def cell(value):
         return re.sub(r"\s+", " ", str(value or "-")).strip() or "-"
-    rows = [(cell(v["nombre_vpn"]), cell(v["req"]), cell(v["solicitante"])) for v in vpns]
-    head = ("NOMBRE VPN", "REQ", "SOLICITANTE")
-    widths = [max(len(head[i]), *(len(r[i]) for r in rows)) for i in range(3)] if rows else [len(h) for h in head]
-    line = lambda r: "  " + "   ".join(r[i].ljust(widths[i]) for i in range(3)).rstrip()
-    return "\n".join([line(head), line(tuple("-" * w for w in widths))] + [line(r) for r in rows])
+    return "\n".join(
+        f"- {cell(v['nombre_vpn'])} | REQ: {cell(v['req'])} | Solicitante: {cell(v['solicitante'])}"
+        for v in vpns
+    )
 
 
 def _contacts(db):
@@ -271,7 +274,7 @@ def preview(db):
 
 # ---------------------------------------------------------------- mensaje
 
-DEFAULT_SUBJECT = "SOX Control 7 - Inicio de validación de accesos VPN | {periodo} | Fecha límite {fecha_limite}"
+DEFAULT_SUBJECT = "SOX Control 7 - Inicio de validación de accesos VPN | {periodo}"
 DEFAULT_BODY = (
     "Estimado(a) {gerente}:\n\n"
     "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN "

@@ -139,7 +139,7 @@
         },
         "_sincronizar_contactos_ldap": "true = al iniciar campaña se actualizan los correos de SOX_GERENTES_CONTACTO desde LDAP (sobrescribe cambios manuales). false = se conservan los correos de la tabla (pruebas).",
         "sincronizar_contactos_ldap": true,
-        "asunto": "SOX Control 7 - Inicio de validación de accesos VPN | {periodo} | Fecha límite {fecha_limite}",
+        "asunto": "SOX Control 7 - Inicio de validación de accesos VPN | {periodo}",
         "cuerpo": [
           "Estimado(a) {gerente}:",
           "",
