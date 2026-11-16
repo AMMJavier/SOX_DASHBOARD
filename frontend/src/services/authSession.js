@@ -1,6 +1,9 @@
 
 const USER_KEY = "soxUser";
-const LAST_ACTIVITY_KEY = "soxLastActivity";
+export const LAST_ACTIVITY_KEY = "soxLastActivity";
+
+// Debe coincidir con SESSION_TIMEOUT_MINUTES del backend (auth/session_service.py).
+export const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "/api"
@@ -132,6 +135,51 @@ export async function logout() {
   } finally {
     window.location.replace("/login");
   }
+}
+
+// Última interacción del usuario (compartida entre pestañas).
+export function readLastActivity() {
+  const value = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function markActivity(now = Date.now()) {
+  localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+}
+
+// true si pasaron 15 minutos sin interacción.
+export function isSessionIdleExpired(now = Date.now()) {
+  const last = readLastActivity();
+  if (last === null) {
+    // Sesión guardada sin marca: se empieza a contar desde ahora.
+    markActivity(now);
+    return false;
+  }
+  return now - last >= IDLE_TIMEOUT_MS;
+}
+
+// true si el JWT superó su vencimiento absoluto (8 horas desde el login).
+export function isTokenExpired(now = Date.now()) {
+  const token = getAccessToken();
+  if (!token) return false;
+  try {
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(part));
+    return typeof payload.exp === "number" && now >= payload.exp * 1000;
+  } catch {
+    return false;
+  }
+}
+
+// Cerrar la sesión por inactividad o vencimiento.
+export function expireSession() {
+  const token = getAccessToken();
+  clearSession();
+  revokeRemoteSession(token).finally(() => {
+    if (window.location.pathname !== "/login") {
+      window.location.replace("/login?expired=1");
+    }
+  });
 }
 
 // Gestionar tokens inválidos o sesiones vencidas.
