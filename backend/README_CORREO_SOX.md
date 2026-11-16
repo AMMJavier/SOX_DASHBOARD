@@ -57,6 +57,23 @@ y lo registra en el log.
 | `controles.5.correo_formal` | Borrador prellenado del correo por evento del Control 5 |
 | `controles.7.aviso_gerentes` | Aviso de campaña: `modo_prueba` (`activo`, `destinatarios`, `nota`), `asunto`, `cuerpo` |
 
+### Recordatorios automáticos, fecha tope y alertas
+
+| Clave | Uso |
+|---|---|
+| `automatico.activo` | `true` envía solos los recordatorios y alertas; `false` no envía nada automático (el botón manual sigue funcionando) |
+| `automatico.hora_desde` | Hora a partir de la cual se envía (por defecto 8) |
+| `automatico.usuario` | Usuario SOX que figura como solicitante en la auditoría |
+| `controles.<n>.calendario.recordatorios` | Días de envío `MM-DD` (se envía ese día o hasta 7 días después si la API estuvo apagada) |
+| `controles.<n>.calendario.fecha_tope` | Fecha límite de evidencias `MM-DD` (anual: una; semestral: una por semestre). Alimenta el indicador "Vencidos" |
+| `controles.<n>.calendario.alerta_dias_antes` | Si el período no tiene evidencia, alerta N días antes de la fecha tope |
+| `controles.<n>.calendario.adjuntar_ultimo` | `{"controles": [2], "tipos": ["plan"]}`: adjunta el último archivo subido |
+| `controles.<n>.alerta` | Asunto y cuerpo de la alerta de evidencia faltante |
+
+El programador corre dentro de la API (`services/sox/common/reminder_scheduler.py`), revisa cada
+30 minutos y usa claves fijas en `SOX_MAIL_OUTBOX` (`AUTO-R-...`, `AUTO-A-...`): el mismo
+recordatorio nunca sale dos veces. Se desactiva por completo con `SOX_SCHEDULER_DISABLED=true` en `.env`.
+
 Los cuerpos pueden ser texto o lista de líneas, y usan `{variables}` (cada bloque del
 ejemplo indica las suyas en `_variables`). Las claves que empiezan con `_` son comentarios.
 

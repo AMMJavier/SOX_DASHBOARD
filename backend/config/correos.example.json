@@ -13,6 +13,12 @@
   ],
   "_copias_generales": "Se agregan en CC a TODOS los correos SOX (correo formal, notificaciones y avisos del Control 7).",
   "copias_generales": [],
+  "_automatico": "Recordatorios y alertas automáticas por control (controles.<n>.calendario). Con activo=false no se envía nada automáticamente; el botón manual sigue funcionando. hora_desde: hora a partir de la cual se envía. usuario: usuario SOX que figura como solicitante en la auditoría (si no existe, un administrador activo).",
+  "automatico": {
+    "activo": false,
+    "hora_desde": 8,
+    "usuario": "usuario_sox"
+  },
   "controles": {
     "1": {
       "copias": [],
@@ -33,6 +39,32 @@
           "",
           "Saludos."
         ]
+      },
+      "calendario": {
+        "_info": "Anual. Recordatorios a mitad de año y en noviembre (reunión SOX). FECHAS PROVISIONALES: confirmar con Dani.",
+        "recordatorios": [
+          "06-15",
+          "11-15"
+        ],
+        "fecha_tope": [
+          "12-15"
+        ],
+        "alerta_dias_antes": 14
+      },
+      "alerta": {
+        "_variables": "{control} {periodo} {fecha_tope} {dias_restantes} {anio} {semestre}",
+        "asunto": "SOX Control {control} - ALERTA: falta evidencia | {periodo} | Fecha tope {fecha_tope}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "No se registra evidencia cargada en la plataforma SOX para el Control {control} en el período {periodo}.",
+          "",
+          "La fecha tope para subir la evidencia es el {fecha_tope} (faltan {dias_restantes} día(s)).",
+          "",
+          "Por favor, suban la evidencia correspondiente en el repositorio del control antes de esa fecha.",
+          "",
+          "Saludos."
+        ]
       }
     },
     "2": {
@@ -46,6 +78,40 @@
           "Se solicita elaborar o revisar el Plan de Seguridad anual de firewalls, gestionar su aprobación por Gerencia y cargar el plan y el correo de aprobación en el expediente anual.",
           "",
           "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      },
+      "calendario": {
+        "_info": "Anual. Enero con el plan adjunto; diciembre con el último plan subido. FECHAS PROVISIONALES.",
+        "recordatorios": [
+          "01-05",
+          "12-01"
+        ],
+        "fecha_tope": [
+          "01-31"
+        ],
+        "alerta_dias_antes": 14,
+        "adjuntar_ultimo": {
+          "controles": [
+            2
+          ],
+          "tipos": [
+            "plan"
+          ]
+        }
+      },
+      "alerta": {
+        "_variables": "{control} {periodo} {fecha_tope} {dias_restantes} {anio} {semestre}",
+        "asunto": "SOX Control {control} - ALERTA: falta evidencia | {periodo} | Fecha tope {fecha_tope}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "No se registra evidencia cargada en la plataforma SOX para el Control {control} en el período {periodo}.",
+          "",
+          "La fecha tope para subir la evidencia es el {fecha_tope} (faltan {dias_restantes} día(s)).",
+          "",
+          "Por favor, suban la evidencia correspondiente en el repositorio del control antes de esa fecha.",
           "",
           "Saludos."
         ]
@@ -63,6 +129,40 @@
           "Se solicita realizar la revisión semestral del avance del plan aprobado en Control 2, documentar la reunión y cargar el correo o respaldo de la aprobación de Jefatura.",
           "",
           "Período: {periodo}{referencia_linea}",
+          "",
+          "Saludos."
+        ]
+      },
+      "calendario": {
+        "_info": "Semestral. Reunión de revisión a fines de enero y en octubre, con el último plan/avance subido. FECHAS PROVISIONALES.",
+        "recordatorios": [
+          "01-25",
+          "10-15"
+        ],
+        "fecha_tope": [
+          "06-30",
+          "12-15"
+        ],
+        "alerta_dias_antes": 14,
+        "adjuntar_ultimo": {
+          "controles": [
+            3,
+            2
+          ],
+          "tipos": []
+        }
+      },
+      "alerta": {
+        "_variables": "{control} {periodo} {fecha_tope} {dias_restantes} {anio} {semestre}",
+        "asunto": "SOX Control {control} - ALERTA: falta evidencia | {periodo} | Fecha tope {fecha_tope}",
+        "cuerpo": [
+          "Estimados:",
+          "",
+          "No se registra evidencia cargada en la plataforma SOX para el Control {control} en el período {periodo}.",
+          "",
+          "La fecha tope para subir la evidencia es el {fecha_tope} (faltan {dias_restantes} día(s)).",
+          "",
+          "Por favor, suban la evidencia correspondiente en el repositorio del control antes de esa fecha.",
           "",
           "Saludos."
         ]
@@ -100,6 +200,13 @@
           "Quedo atento a su aprobación.",
           "",
           "Saludos."
+        ]
+      },
+      "calendario": {
+        "_info": "Por evento: recordatorio para subir las autorizaciones. Sin fecha tope. FECHAS PROVISIONALES.",
+        "recordatorios": [
+          "06-15",
+          "11-15"
         ]
       }
     },

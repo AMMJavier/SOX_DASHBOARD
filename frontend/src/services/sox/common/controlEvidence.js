@@ -73,6 +73,13 @@ export function createControl5Event(data) {
 }
 
 
+/** Fecha tope del período, días restantes y si venció (correos.json > controles.<n>.calendario). */
+export function getControlCalendar(control, anio, semestre = null) {
+  const qs = new URLSearchParams({ anio: String(anio) });
+  if (semestre != null) qs.set("semestre", String(semestre));
+  return authenticatedFetch(`${BASE}/${control}/calendario?${qs}`).then(parse);
+}
+
 export function previewControlReminder(control, data) {
   return authenticatedFetch(`${BASE}/${control}/recordatorios/previsualizar`, {
     method: "POST", headers: { "Content-Type": "application/json" },

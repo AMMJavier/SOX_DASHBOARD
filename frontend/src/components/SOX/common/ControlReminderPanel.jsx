@@ -60,6 +60,7 @@ export default function ControlReminderPanel({
           <p><strong>Para:</strong> {preview.mensaje.destinatarios.join(", ")}</p>
           {preview.mensaje.cc?.length > 0 && <p><strong>CC:</strong> {preview.mensaje.cc.join(", ")}</p>}
           <p><strong>Asunto:</strong> {preview.mensaje.asunto}</p>
+          {preview.mensaje.adjuntos?.length > 0 && <p><strong>Adjunto:</strong> {preview.mensaje.adjuntos.map((a) => `${a.nombre} (último archivo subido en Control ${a.control}, ${a.fecha})`).join(", ")}</p>}
           <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-slate-700">{preview.mensaje.cuerpo}</pre>
           {!preview.envio_habilitado && <InfoBanner caution>El envío sigue desactivado en el backend hasta que Infraestructura autorice su configuración.</InfoBanner>}
         </div>

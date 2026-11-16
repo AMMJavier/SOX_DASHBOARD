@@ -42,3 +42,13 @@ def root():
 def health():
     # No simula una comprobación de bases externas.
     return {"status": "up"}
+
+
+@app.on_event("startup")
+def start_reminder_scheduler():
+    """Recordatorios y alertas automáticas por control (correos.json > automatico / calendario).
+    No envía nada mientras "automatico.activo" sea false. Desactivable con SOX_SCHEDULER_DISABLED=true."""
+    if os.getenv("SOX_SCHEDULER_DISABLED", "false").strip().lower() == "true":
+        return
+    from services.sox.common import reminder_scheduler
+    reminder_scheduler.start()

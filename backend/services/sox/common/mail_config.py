@@ -133,6 +133,65 @@ def draft_template(number) -> dict | None:
     return {"asunto": _text(data.get("asunto")), "cuerpo": _text(data.get("cuerpo"))}
 
 
+def automatic() -> dict:
+    """Envío automático de recordatorios y alertas (correos.json > automatico)."""
+    data = load().get("automatico") or {}
+    try:
+        hour = int(data.get("hora_desde", 8))
+    except (TypeError, ValueError):
+        hour = 8
+    return {
+        "activo": data.get("activo") is True,
+        "hora_desde": min(max(hour, 0), 23),
+        "usuario": str(data.get("usuario") or "").strip(),
+    }
+
+
+def calendar(number) -> dict:
+    """Calendario del control (correos.json > controles.<n>.calendario).
+
+    fechas en formato "MM-DD":
+      recordatorios      días en que se envía la notificación automática
+      fecha_tope         fecha límite de evidencias; una por año (control anual) o
+                         una por semestre (controles semestrales)
+      alerta_dias_antes  si falta evidencia, alerta N días antes de la fecha tope
+      adjuntar_ultimo    {"controles": [2], "tipos": ["plan"]}: adjunta el último archivo subido
+    """
+    data = control(number).get("calendario") or {}
+
+    def dates(value):
+        valid = []
+        for item in _list(value):
+            if re.fullmatch(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", item):
+                valid.append(item)
+            else:
+                logger.error("Fecha inválida %r en correos.json > controles.%s.calendario (usar MM-DD)", item, number)
+        return sorted(set(valid))
+
+    attach = data.get("adjuntar_ultimo") or None
+    if attach:
+        attach = {
+            "controles": [int(x) for x in _list(attach.get("controles")) if str(x).isdigit()] or [int(number)],
+            "tipos": _list(attach.get("tipos")),
+        }
+    try:
+        days = int(data.get("alerta_dias_antes", 0) or 0)
+    except (TypeError, ValueError):
+        days = 0
+    return {
+        "recordatorios": dates(data.get("recordatorios")),
+        "fecha_tope": dates(data.get("fecha_tope")),
+        "alerta_dias_antes": max(days, 0),
+        "adjuntar_ultimo": attach,
+    }
+
+
+def alert_template(number) -> dict:
+    """Texto de la alerta de evidencia faltante (controles.<n>.alerta o valores por defecto)."""
+    data = control(number).get("alerta") or {}
+    return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
+
+
 def c7_notice() -> dict:
     """Aviso de apertura de campaña a gerentes (Control 7)."""
     data = control(7).get("aviso_gerentes") or {}

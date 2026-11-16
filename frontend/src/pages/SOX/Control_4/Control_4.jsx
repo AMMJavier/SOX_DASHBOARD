@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, ClipboardList, ShieldCheck } from "lucide-react";
+import { CheckCircle2, FileText, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
 
 /**
  * Control 4 — Vista informativa de un control ya atendido por Workflow.
@@ -45,6 +45,25 @@ export default function ControlPilot({ control }) {
           solicitudes aprobadas en Workflow y registro de las operaciones en el firewall.
         </p>
       </header>
+
+      {/* Acordado en la reunión de controles SOX: este control no requiere carga de evidencias. */}
+      <section className="flex items-start gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+          <Workflow className="h-6 w-6" aria-hidden="true" />
+        </div>
+        <div className="text-sm leading-6 text-emerald-900">
+          <p className="text-base font-bold">Control automatizado · no requiere subir evidencias en esta plataforma</p>
+          <p className="mt-1">
+            Las solicitudes de creación, modificación y eliminación de <strong>accesos remotos VPN</strong> se
+            gestionan y aprueban en el <strong>Workflow (Remedy)</strong>. <strong>Auditoría tiene acceso directo a Remedy</strong> y
+            descarga desde allí los requerimientos con sus aprobaciones, que constituyen la evidencia de este control.
+          </p>
+          <p className="mt-1">
+            <strong>Evidencia:</strong> informe de Workflow (Remedy) con la creación, modificación o eliminación del acceso
+            remoto VPN y la aprobación previa del Jefe de Infraestructura TI.
+          </p>
+        </div>
+      </section>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
         <div className="space-y-5">

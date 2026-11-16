@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
-import { downloadControlEvidence, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
+import { downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { CalendarDays, CheckCheck, Clock, FolderOpen, History, Mail, Paperclip, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";
@@ -11,7 +11,7 @@ import ControlMailPanel from "./ControlMailPanel";
 // Controles con correo formal + archivado automático.
 const MAIL_CONTROLS = [1, 2, 3];
 // Controles con botón "Enviar notificación" en la vista Evidencias (correos.json > controles.<n>.notificacion).
-const NOTIFY_CONTROLS = [1];
+const NOTIFY_CONTROLS = [1, 2, 3];
 // Tipo de evidencia propuesto para el correo enviado (el usuario puede cambiarlo).
 const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
 
@@ -60,12 +60,26 @@ export default function ControlWorkspace({ config }) {
   const canWrite = ["administrador", "desarrollador"].includes(currentRole);
   const canVerify = currentRole === "administrador";
   const periodSemester = config.period === "semester" ? Number(semester) : null;
+  // Fecha tope del período (correos.json > controles.<n>.calendario.fecha_tope).
+  const [calendar, setCalendar] = useState(null);
+  useEffect(() => {
+    let live = true;
+    getControlCalendar(config.number, Number(year), periodSemester)
+      .then((data) => { if (live) setCalendar(data); })
+      .catch(() => { if (live) setCalendar(null); });
+    return () => { live = false; };
+  }, [config.number, year, periodSemester, refreshRecords]);
+  const pendingCount = evidences.filter((x) => x.estado === "CARGADA").length;
   const metrics = {
     total: evidences.length,
     confirmed: evidences.filter((x) => x.estado === "VERIFICADA").length,
-    pending: evidences.filter((x) => x.estado === "CARGADA").length,
-    expired: null, // No hay fecha de vencimiento oficial configurada.
+    pending: pendingCount,
+    // Vencidos: pasada la fecha tope, las evidencias sin verificar (o 1 si no se subió ninguna).
+    expired: !calendar?.fecha_tope ? null : calendar.vencido ? (evidences.length ? pendingCount : 1) : 0,
   };
+  const deadlineText = !calendar?.fecha_tope ? null
+    : `${calendar.fecha_tope.split("-").reverse().join("/")}`
+      + (calendar.vencido ? " · vencida" : ` · faltan ${calendar.dias_restantes} día(s)`);
 
   useEffect(() => {
     let live = true;
@@ -125,7 +139,11 @@ export default function ControlWorkspace({ config }) {
     <ControlHeading {...config}/>
     <EvidenceKpis metrics={loadError ? null : metrics}/>
     {loadError && <InfoBanner caution>No se pudo cargar el expediente: {loadError}. Verifica que se hayan creado las tablas en Oracle.</InfoBanner>}
-    <InfoBanner>Las evidencias se guardan en Oracle (metadatos y auditoría) y en un repositorio privado (archivo). <strong>Verificada</strong> significa revisión interna; no sustituye el correo formal de aprobación corporativa. Vencimientos: por definir con el área.</InfoBanner>
+    {calendar?.fecha_tope && <div className={`flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm ${calendar.vencido ? "border-red-200 bg-red-50 text-red-800" : calendar.dias_restantes <= (calendar.alerta_dias_antes || 0) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+      <CalendarDays size={16}/><strong>Fecha tope de evidencias:</strong> {deadlineText}
+      {calendar.recordatorios?.length > 0 && <span className="text-xs opacity-80">· Recordatorios {calendar.automatico ? "automáticos" : "programados (envío automático desactivado)"}: {calendar.recordatorios.map((d) => d.split("-").reverse().join("/")).join(", ")}</span>}
+    </div>}
+    <InfoBanner>Las evidencias se guardan en Oracle (metadatos y auditoría) y en un repositorio privado (archivo). <strong>Verificada</strong> significa revisión interna; no sustituye el correo formal de aprobación corporativa. {calendar?.fecha_tope ? "La fecha tope y los recordatorios se configuran en backend/config/correos.json." : "Fecha tope: sin configurar para este control."}</InfoBanner>
 
     {/* Solo móviles: en escritorio las secciones están en el sidebar SOX. */}
     <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:hidden" aria-label={`Secciones del control ${config.number}`}>
