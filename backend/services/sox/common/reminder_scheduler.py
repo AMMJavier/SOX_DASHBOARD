@@ -1,7 +1,7 @@
 """Envío automático de recordatorios y alertas de evidencia faltante por control.
 
 Configuración (backend/config/correos.json, se relee sola):
-  "automatico": {"activo": true, "hora_desde": 8, "usuario": "dev_user"}
+  "automatico": {"activo": true, "hora_desde": "09:15", "usuario": "dev_user"}
   "controles": {"1": {"calendario": {
         "recordatorios": ["06-15", "11-15"],     # días de envío (MM-DD)
         "fecha_tope": ["12-15"],                 # anual: 1 fecha; semestral: 1 por semestre
@@ -10,7 +10,7 @@ Configuración (backend/config/correos.json, se relee sola):
   }}}
 
 Funcionamiento:
-  - Un hilo dentro de la API revisa cada 30 minutos (desde "hora_desde").
+  - Un hilo dentro de la API revisa cada minuto y envía desde "hora_desde" (HH:MM).
   - Recordatorio: se envía el día indicado o, si la API estuvo apagada, hasta 7 días después.
   - Alerta: entre (fecha_tope - alerta_dias_antes) y la fecha tope, solo si el período no
     tiene ninguna evidencia cargada o verificada.
@@ -29,7 +29,7 @@ from services.sox.common import mail_config
 from services.sox.common import mail_service as mail
 from services.sox.common.reminder_service import SEMESTER_CONTROLS, controls, deliver
 
-CHECK_EVERY_SECONDS = 30 * 60
+CHECK_EVERY_SECONDS = 60  # Revisa cada minuto: permite horas exactas como "09:15".
 REMINDER_GRACE_DAYS = 7
 _started = False
 _lock = threading.Lock()
@@ -105,7 +105,15 @@ def _system_user(db):
     return int(row[0]), row[1]
 
 
+def _already_registered(db, key):
+    """Consulta liviana: si la clave ya está en SOX_MAIL_OUTBOX no se vuelve a armar el correo."""
+    return bool(db.execute(text("SELECT COUNT(*) FROM AUTOM.SOX_MAIL_OUTBOX WHERE IDEMPOTENCY_KEY = :k"),
+                           {"k": key}).scalar())
+
+
 def _send(db, user, *, control, anio, semestre, kind, key, extra=None):
+    if _already_registered(db, key):
+        return
     start = time.monotonic()
     try:
         result = deliver(db, control=control, anio=anio, semestre=semestre, referencia="Envío automático",
@@ -125,7 +133,7 @@ def run_once(now=None, db=None):
     """Revisa y envía lo que corresponda hoy. Devuelve cuántos envíos se intentaron."""
     now = now or datetime.now()
     auto = mail_config.automatic()
-    if not auto["activo"] or now.hour < auto["hora_desde"]:
+    if not auto["activo"] or now.hour * 60 + now.minute < auto["minuto_del_dia"]:
         return 0
     today = now.date()
     own_db = db is None
@@ -162,7 +170,7 @@ def run_once(now=None, db=None):
 
 
 def _loop():
-    time.sleep(60)  # Deja terminar el arranque de la API.
+    time.sleep(15)  # Deja terminar el arranque de la API.
     while True:
         try:
             run_once()
@@ -179,6 +187,6 @@ def start():
             return
         _started = True
     auto = mail_config.automatic()
-    mail.console(f"AUTOMATICO: programador iniciado (revisa cada {CHECK_EVERY_SECONDS // 60} min) | "
+    mail.console(f"AUTOMATICO: programador iniciado (revisa cada {CHECK_EVERY_SECONDS} s) | "
                  f"activo={auto['activo']} hora_desde={auto['hora_desde']}")
     threading.Thread(target=_loop, name="sox-recordatorios", daemon=True).start()

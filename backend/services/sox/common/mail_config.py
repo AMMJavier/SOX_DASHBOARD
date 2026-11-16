@@ -136,13 +136,17 @@ def draft_template(number) -> dict | None:
 def automatic() -> dict:
     """Envío automático de recordatorios y alertas (correos.json > automatico)."""
     data = load().get("automatico") or {}
-    try:
-        hour = int(data.get("hora_desde", 8))
-    except (TypeError, ValueError):
-        hour = 8
+    # "hora_desde": 8 (hora entera) o "09:15" (hora y minutos). Inválido -> 08:00.
+    raw = str(data.get("hora_desde", 8)).strip()
+    match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?", raw)
+    hour, minute = (int(match.group(1)), int(match.group(2) or 0)) if match else (8, 0)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        logger.error("automatico.hora_desde inválida %r en correos.json (usar HH:MM); se usa 08:00", raw)
+        hour, minute = 8, 0
     return {
         "activo": data.get("activo") is True,
-        "hora_desde": min(max(hour, 0), 23),
+        "hora_desde": f"{hour:02d}:{minute:02d}",
+        "minuto_del_dia": hour * 60 + minute,
         "usuario": str(data.get("usuario") or "").strip(),
     }
 

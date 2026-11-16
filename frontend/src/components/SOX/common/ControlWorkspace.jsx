@@ -77,9 +77,17 @@ export default function ControlWorkspace({ config }) {
     // Vencidos: pasada la fecha tope, las evidencias sin verificar (o 1 si no se subió ninguna).
     expired: !calendar?.fecha_tope ? null : calendar.vencido ? (evidences.length ? pendingCount : 1) : 0,
   };
+  // Cumplido: hay evidencia y toda está verificada (no se marca en rojo aunque la fecha ya pasó).
+  const deadlineMet = evidences.length > 0 && pendingCount === 0;
   const deadlineText = !calendar?.fecha_tope ? null
     : `${calendar.fecha_tope.split("-").reverse().join("/")}`
-      + (calendar.vencido ? " · vencida" : ` · faltan ${calendar.dias_restantes} día(s)`);
+      + (deadlineMet ? " · cumplida (evidencia verificada)"
+        : calendar.vencido ? (evidences.length ? " · vencida, evidencia sin verificar" : " · vencida, sin evidencia")
+        : ` · faltan ${calendar.dias_restantes} día(s)`);
+  const deadlineTone = deadlineMet ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+    : calendar?.vencido ? "border-red-200 bg-red-50 text-red-800"
+    : calendar?.dias_restantes <= (calendar?.alerta_dias_antes || 0) ? "border-amber-200 bg-amber-50 text-amber-800"
+    : "border-slate-200 bg-slate-50 text-slate-700";
 
   useEffect(() => {
     let live = true;
@@ -139,7 +147,7 @@ export default function ControlWorkspace({ config }) {
     <ControlHeading {...config}/>
     <EvidenceKpis metrics={loadError ? null : metrics}/>
     {loadError && <InfoBanner caution>No se pudo cargar el expediente: {loadError}. Verifica que se hayan creado las tablas en Oracle.</InfoBanner>}
-    {calendar?.fecha_tope && <div className={`flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm ${calendar.vencido ? "border-red-200 bg-red-50 text-red-800" : calendar.dias_restantes <= (calendar.alerta_dias_antes || 0) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+    {calendar?.fecha_tope && <div className={`flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm ${deadlineTone}`}>
       <CalendarDays size={16}/><strong>Fecha tope de evidencias:</strong> {deadlineText}
       {calendar.recordatorios?.length > 0 && <span className="text-xs opacity-80">· Recordatorios {calendar.automatico ? "automáticos" : "programados (envío automático desactivado)"}: {calendar.recordatorios.map((d) => d.split("-").reverse().join("/")).join(", ")}</span>}
     </div>}
