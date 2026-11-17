@@ -70,8 +70,6 @@ def listar_eventos(anio: int = Query(..., ge=2020, le=2100),
              (SELECT COUNT(*) FROM AUTOM.SOX_CONTROL_EVIDENCIAS e
                WHERE e.EVENTO_ID=ev.ID AND e.TIPO_EVIDENCIA='aprobacion') AS "aprobaciones",
              (SELECT COUNT(*) FROM AUTOM.SOX_CONTROL_EVIDENCIAS e
-               WHERE e.EVENTO_ID=ev.ID AND e.TIPO_EVIDENCIA='solicitud') AS "solicitudes",
-             (SELECT COUNT(*) FROM AUTOM.SOX_CONTROL_EVIDENCIAS e
                WHERE e.EVENTO_ID=ev.ID AND e.TIPO_EVIDENCIA='ejecucion') AS "ejecuciones"
       FROM AUTOM.SOX_CONTROL5_EVENTOS ev
       JOIN AUTOM.USUARIOS u ON u.ID=ev.CREADO_POR

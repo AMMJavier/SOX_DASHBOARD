@@ -58,22 +58,6 @@ const TYPES = [
 const fmt = (v) => v ? String(v).replace("T", " ").slice(0, 19) : "—";
 const today = () => new Date().toLocaleDateString("en-CA");
 
-// Estado del respaldo: la solicitud enviada NO es la aprobación; la aprobación es la respuesta de Jefatura.
-function BackupStatus({ item }) {
-  const approvals = Number(item.aprobaciones || 0);
-  const requests = Number(item.solicitudes || 0);
-  const [label, hint, tone] = approvals
-    ? ["Aprobación adjunta", null, "text-emerald-700"]
-    : requests
-      ? ["Solicitud enviada", "Falta adjuntar la respuesta de Jefatura", "font-semibold text-blue-700"]
-      : ["Falta aprobación", null, "font-semibold text-amber-700"];
-  return <>
-    <span className={tone}>{label}</span>
-    {hint && <p className="text-xs text-amber-700">{hint}</p>}
-    <p className="text-xs text-slate-500">{item.total_archivos} documentos</p>
-  </>;
-}
-
 function Notice({ children, error = false }) {
   return <div className={`rounded-xl border p-3 text-sm ${error ? "border-red-200 bg-red-50 text-red-700" : "border-blue-200 bg-blue-50 text-blue-800"}`}>{children}</div>;
 }
@@ -195,7 +179,7 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
       <div className="mb-3 flex justify-end"><button type="button" className={SECONDARY} onClick={() => setRefresh((n) => n + 1)}><RefreshCw size={15}/>Actualizar</button></div>
       {loading ? <p className="p-4 text-sm text-slate-500">Consultando Oracle...</p> : !events.length ? <p className="p-4 text-sm text-slate-500">No hay cambios de administradores registrados en el año.</p>
         : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Fecha evento</th><th className="p-3">Cuenta / perfil</th><th className="p-3">Operación</th><th className="p-3">Ticket</th><th className="p-3">Respaldo</th><th className="p-3">Expediente</th></tr></thead>
-          <tbody>{events.map((item) => <tr key={item.id} className="border-t"><td className="whitespace-nowrap p-3">{String(item.fecha_evento).slice(0, 10)}</td><td className="p-3"><p className="font-semibold">{item.cuenta}</p><p className="text-xs text-slate-500">{item.perfil || "Sin perfil especificado"}</p></td><td className="p-3">{item.operacion}</td><td className="p-3">{item.ticket || "—"}</td><td className="p-3"><BackupStatus item={item}/></td><td className="p-3"><button type="button" className={SECONDARY} onClick={() => setSelection(selection === item.id ? null : item.id)}>{selection === item.id ? <ChevronUp size={15}/> : <ChevronDown size={15}/>} {selection === item.id ? "Cerrar" : "Abrir"}</button></td></tr>)}</tbody></table></div>}
+          <tbody>{events.map((item) => <tr key={item.id} className="border-t"><td className="whitespace-nowrap p-3">{String(item.fecha_evento).slice(0, 10)}</td><td className="p-3"><p className="font-semibold">{item.cuenta}</p><p className="text-xs text-slate-500">{item.perfil || "Sin perfil especificado"}</p></td><td className="p-3">{item.operacion}</td><td className="p-3">{item.ticket || "—"}</td><td className="p-3"><span className={item.aprobaciones ? "text-emerald-700" : "font-semibold text-amber-700"}>{item.aprobaciones ? "Aprobación adjunta" : "Falta aprobación"}</span><p className="text-xs text-slate-500">{item.total_archivos} documentos</p></td><td className="p-3"><button type="button" className={SECONDARY} onClick={() => setSelection(selection === item.id ? null : item.id)}>{selection === item.id ? <ChevronUp size={15}/> : <ChevronDown size={15}/>} {selection === item.id ? "Cerrar" : "Abrir"}</button></td></tr>)}</tbody></table></div>}
     </Panel>
     {selected && <Panel title={`3. Evidencias del evento #${selected.id} — ${selected.cuenta}`} description="Los soportes se vinculan a este evento, no a otros cambios de la misma cuenta.">
       <EvidenceList items={eventFiles}/>
