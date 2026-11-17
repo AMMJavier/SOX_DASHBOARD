@@ -14,18 +14,15 @@ const config = {
     "Obtener y conservar la aprobación correspondiente del Jefe de Infraestructura TI.",
     "Ejecutar el alta, modificación o baja autorizada en el firewall.",
     "Guardar el detalle y la evidencia por cada evento y cuenta afectada.",
-    "Preparar un consolidado por periodo solo como evidencia complementaria.",
   ],
   evidence: [
     { key: "aprobacion", label: "Correo de aprobación individual", help: "Autorización de Jefatura asociada a cada cambio de administrador." },
     { key: "ejecucion", label: "Soporte de modificación ejecutada", help: "Datos del cambio en la consola, sin divulgar contraseñas ni secretos." },
     { key: "solicitud", label: "Solicitud o referencia del evento", help: "Correo o ticket relacionado con la operación." },
-    { key: "consolidado", label: "Consolidado de cambios del periodo", help: "Opcional: no sustituye las aprobaciones individuales." },
   ],
   rules: [
     "Una evidencia por evento, aunque existan varios eventos para la misma cuenta.",
     "El correo de aprobación debe corresponder al cambio solicitado.",
-    "Una captura consolidada semestral no reemplaza el expediente individual.",
     "Los registros de la cuenta y perfil se manejarán como información administrativa restringida.",
   ],
   reminders: [

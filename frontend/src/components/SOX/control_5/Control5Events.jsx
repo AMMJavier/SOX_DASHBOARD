@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Plus, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Plus, RefreshCw, Upload } from "lucide-react";
 import {
   createControl5Event, getControl5Events, uploadControlEvidence,
   downloadControlEvidence, verifyControlEvidence,
@@ -73,9 +73,6 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
   const [file, setFile] = useState(null);
   const [type, setType] = useState("aprobacion");
   const [notes, setNotes] = useState("");
-  const [consolidatedFile, setConsolidatedFile] = useState(null);
-  const [reference, setReference] = useState("");
-  const [consolidatedSemester, setConsolidatedSemester] = useState("1");
   const [refresh, setRefresh] = useState(0);
 
   useEffect(() => { setSelection(null); }, [year]);
@@ -92,7 +89,6 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
 
   const selected = events.find((event) => event.id === selection) || null;
   const eventFiles = useMemo(() => evidences.filter((item) => item.evento_id === selection && selection != null), [evidences, selection]);
-  const annualFiles = evidences.filter((item) => item.tipo === "consolidado" && item.evento_id == null);
   const change = (key, value) => setForm((old) => ({ ...old, [key]: value }));
   const notifyChanges = () => { setRefresh((n) => n + 1); onChanged?.(); };
 
@@ -114,22 +110,20 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
     finally { setBusy(false); }
   }
 
-  async function attach(event, annual = false) {
+  async function attach(event) {
     event.preventDefault();
-    const uploadFile = annual ? consolidatedFile : file;
-    if (!canWrite || !uploadFile || busy || (!annual && !selected)) return;
+    if (!canWrite || !file || busy || !selected) return;
     setBusy(true); setError(""); setMessage("");
     try {
       await uploadControlEvidence(5, {
-        file: uploadFile, anio: year, semestre: annual ? Number(consolidatedSemester) : null,
-        tipo: annual ? "consolidado" : type,
-        eventoId: annual ? null : selected.id,
-        referencia: annual ? reference : (selected.ticket || ""),
+        file, anio: year, semestre: null,
+        tipo: type,
+        eventoId: selected.id,
+        referencia: selected.ticket || "",
         observaciones: notes,
       });
-      setMessage(annual ? "Consolidado semestral guardado; no sustituye las evidencias individuales." : "Evidencia asociada al evento y guardada en el repositorio privado.");
-      if (annual) setConsolidatedFile(null);
-      else setFile(null);
+      setMessage("Evidencia asociada al evento y guardada en el repositorio privado.");
+      setFile(null);
       setNotes("");
       notifyChanges();
     } catch (err) { setError(err.message); }
@@ -147,7 +141,7 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
   function EvidenceList({ items }) {
     return items.length ? <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
       <thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3">Fecha carga (UTC)</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead>
-      <tbody>{items.map((doc) => <tr key={doc.id} className="border-t border-slate-100"><td className="p-3"><span className="font-medium">{doc.nombre_archivo}</span><p className="text-xs text-slate-500">Cargado por {doc.creado_por}</p></td><td className="p-3">{doc.tipo}{doc.tipo === "consolidado" && <p className="text-xs text-slate-500">Semestre {doc.semestre}</p>}</td><td className="whitespace-nowrap p-3">{fmt(doc.creado_en)}</td><td className="p-3">{doc.estado}</td><td className="p-3"><div className="flex flex-wrap gap-2">
+      <tbody>{items.map((doc) => <tr key={doc.id} className="border-t border-slate-100"><td className="p-3"><span className="font-medium">{doc.nombre_archivo}</span><p className="text-xs text-slate-500">Cargado por {doc.creado_por}</p></td><td className="p-3">{doc.tipo}</td><td className="whitespace-nowrap p-3">{fmt(doc.creado_en)}</td><td className="p-3">{doc.estado}</td><td className="p-3"><div className="flex flex-wrap gap-2">
         <button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(5, doc.id, doc.nombre_archivo).catch((err) => setError(err.message))}>Descargar</button>
         {canVerify && doc.estado === "CARGADA" && <button type="button" disabled={busy} className={SECONDARY} onClick={() => verify(doc)}>Verificar</button>}
       </div></td></tr>)}</tbody></table></div>
@@ -155,7 +149,7 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
   }
 
   return <div className="space-y-5">
-    <Notice>Cada alta, modificación o baja de administradores debe registrarse como un evento distinto con su correo de aprobación. Un consolidado anual es solo complementario. La plataforma no modifica cuentas de firewall.</Notice>
+    <Notice>Cada alta, modificación o baja de administradores debe registrarse como un evento distinto con su correo de aprobación. La plataforma no modifica cuentas de firewall.</Notice>
     {error && <Notice error><AlertTriangle className="mr-1 inline" size={16}/>{error}</Notice>}
     {message && <Notice><CheckCircle2 className="mr-1 inline" size={16}/>{message}</Notice>}
     {canWrite && <Panel title="1. Registrar evento de administrador" description="La fecha corresponde a la ejecución del cambio; no a la carga de la evidencia.">
@@ -202,17 +196,5 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
       defaultSubject={eventMailDraft(selected).subject} defaultBody={eventMailDraft(selected).body}
       templateVars={eventTemplateVars(selected)}
       repositoryFiles={eventFiles.map((doc) => ({ id: doc.id, nombre: doc.nombre_archivo, bytes: doc.bytes, origen: `${doc.tipo} · ${doc.estado}` }))}/>}
-    <Panel title="4. Consolidado semestral (complementario)" description="Puede incluir un resumen de las autorizaciones, pero no sustituye los correos y cambios por evento.">
-      <EvidenceList items={annualFiles}/>
-      {canWrite && <form className="mt-4 grid gap-3 sm:grid-cols-3" onSubmit={(e) => attach(e, true)}>
-        <label className="text-xs font-semibold text-slate-600">Semestre del consolidado
-          <select className={FIELD} value={consolidatedSemester} onChange={(e) => setConsolidatedSemester(e.target.value)}><option value="1">Primer semestre</option><option value="2">Segundo semestre</option></select></label>
-        <label className="text-xs font-semibold text-slate-600">Archivo consolidado
-          <input required type="file" className={FIELD} accept=".pdf,.doc,.docx,.xlsx,.eml,.msg" onChange={(e) => setConsolidatedFile(e.target.files?.[0] || null)}/></label>
-        <label className="text-xs font-semibold text-slate-600">Referencia
-          <input className={FIELD} maxLength={250} value={reference} onChange={(e) => setReference(e.target.value)}/></label>
-        <div className="sm:col-span-2 flex justify-end"><button type="submit" className={PRIMARY} disabled={!consolidatedFile || busy}><FileText size={16}/>Guardar consolidado</button></div>
-      </form>}
-    </Panel>
   </div>;
 }
