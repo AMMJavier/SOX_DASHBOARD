@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
 import { downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
-import { CalendarDays, CheckCheck, Clock, FolderOpen, History, Mail, Paperclip, RotateCcw, Upload, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCheck, Clock, FolderOpen, History, Mail, Paperclip, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
@@ -55,6 +55,7 @@ export default function ControlWorkspace({ config }) {
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [missingFiles, setMissingFiles] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshRecords, setRefreshRecords] = useState(0);
   const currentRole = readStoredUser()?.rol;
@@ -110,7 +111,7 @@ export default function ControlWorkspace({ config }) {
   }, [config.number, year, periodSemester, refreshRecords]);
 
   async function submitEvidence() {
-    if (!files.length) { setFeedback("Selecciona al menos un archivo."); return; }
+    if (!files.length) { setMissingFiles(true); return; }
     if (!canWrite) { setFeedback("No tienes permisos para cargar evidencias."); return; }
     setSaving(true);
     setFeedback("");
@@ -252,7 +253,7 @@ export default function ControlWorkspace({ config }) {
         </li>)}</ul>}
         <div className="mt-4 flex flex-wrap justify-end gap-3">
           <button type="button" onClick={clearDraft} disabled={saving} className={SECONDARY}><RotateCcw size={16}/>Limpiar</button>
-          <button type="button" onClick={submitEvidence} disabled={saving || !files.length} className={PRIMARY}><Upload size={16}/>{saving ? "Guardando..." : "Guardar evidencias"}</button>
+          <button type="button" onClick={submitEvidence} disabled={saving} className={PRIMARY}><Upload size={16}/>{saving ? "Guardando..." : "Guardar evidencias"}</button>
         </div>
       </Panel>}
       {feedback && <InfoBanner caution>{feedback}</InfoBanner>}
@@ -284,6 +285,14 @@ export default function ControlWorkspace({ config }) {
       <Panel title="Pendientes por definir con el responsable">
         <ul className="space-y-3">{config.openItems.map((item, index) => <li className="flex items-start gap-2 text-sm text-slate-700" key={index}><Mail size={17} className="mt-0.5 shrink-0 text-blue-600"/>{item}</li>)}</ul>
       </Panel>
+    </div>}
+    {missingFiles && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-labelledby="missing-files-title" onClick={() => setMissingFiles(false)}>
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600"><AlertTriangle size={24}/></div>
+        <h3 id="missing-files-title" className="text-lg font-semibold text-slate-900">Falta subir evidencia</h3>
+        <p className="mt-2 text-sm text-slate-600">Selecciona al menos un archivo con «Elegir archivos» antes de guardar.</p>
+        <button type="button" autoFocus onClick={() => setMissingFiles(false)} className={`${PRIMARY} mt-5 w-full justify-center`}>Entendido</button>
+      </div>
     </div>}
   </div>;
 }
