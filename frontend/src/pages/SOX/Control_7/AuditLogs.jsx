@@ -10,9 +10,9 @@ import { registerExport } from "../../../utils/sox/control_7/registerExport";
 async function exportLogs(kind, rows) {
   try {
     const n = kind === "Excel"
-      ? await exportToExcel(rows, "logs-control7-sox.xlsx", AUDIT_COLUMNS, "Logs")
-      : exportToPdf(rows, "logs-control7-sox.pdf", AUDIT_COLUMNS, "Logs de auditoría - Control 7");
-    registerExport({ type: kind, module: "Logs", description: "Logs de auditoría del Control 7", records: n });
+      ? await exportToExcel(rows, "seguimiento-control7-sox.xlsx", AUDIT_COLUMNS, "Seguimiento")
+      : exportToPdf(rows, "seguimiento-control7-sox.pdf", AUDIT_COLUMNS, "Seguimiento - Control 7");
+    registerExport({ type: kind, module: "Seguimiento", description: "Seguimiento del Control 7", records: n });
   } catch (error) {
     console.error(`Error exportando logs a ${kind}:`, error);
     window.alert(`No se pudo generar el archivo ${kind}.`);
@@ -135,7 +135,7 @@ export default function AuditLogs() {
   return (
     <div>
       <h1 className="text-2xl font-bold">
-        Auditoría SOX
+        Seguimiento
       </h1>
 
       <p className="mt-1 text-slate-500">

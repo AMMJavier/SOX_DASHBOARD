@@ -1,4 +1,4 @@
-import { AlertCircle, Database, Download, FileText, ScrollText, Settings, UserCog } from "lucide-react";
+import { AlertCircle, Database, Download, FileText, ScrollText, UserCog } from "lucide-react";
 import SidebarItem from "../layout/SidebarItem";
 
 /** Opciones exclusivas del Control 7. No dibuja un segundo <aside>. */
@@ -18,9 +18,8 @@ export default function Sidebar({ role, pathname }) {
       {item("/SOX/Controls/Control_7/reports", Download, "Exportaciones")}
       {item("/SOX/Controls/Control_7/vpn-sin-parametrizar", AlertCircle, "VPN sin parametrizar")}
       <p className="px-2 pb-1 pt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Administración</p>
-      {item("/SOX/Controls/Control_7/logs", ScrollText, "Logs")}
+      {item("/SOX/Controls/Control_7/logs", ScrollText, "Seguimiento")}
       {role === "administrador" && item("/SOX/Controls/Control_7/users", UserCog, "Usuarios")}
-      {role === "administrador" && item("/SOX/Controls/Control_7/settings", Settings, "Configuración")}
     </>
   );
 }

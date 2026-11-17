@@ -7,7 +7,7 @@ import Control6Conciliation from "../../../components/SOX/control_6/Control6Conc
 import { useSearchParams } from "react-router-dom";
 import { LockKeyhole, Users } from "lucide-react";
 import ControlReminderPanel from "../../../components/SOX/common/ControlReminderPanel";
-import { ControlHeading, EvidenceKpis, InfoBanner, Panel, RequirementList, StepList, FIELD } from "../../../components/SOX/common/ControlUI";
+import { ControlHeading, InfoBanner, Panel, RequirementList, StepList, FIELD } from "../../../components/SOX/common/ControlUI";
 
 const activity = "El Ingeniero Líder de Infraestructura TI contrasta la relación de personal cesante recibida desde Recursos Humanos con la lista de usuarios internos con acceso VPN. Cuando se confirma un acceso que corresponde eliminar, debe conservarse la evidencia de la baja y remitirse un informe al Jefe de Infraestructura TI.";
 const steps = [
@@ -31,7 +31,6 @@ export default function Control_6() {
   return <div className="space-y-6 pb-10">
     <ControlHeading number={6} title="Conciliación de cesantes y VPN internas" frequency="Por validar con RR. HH." responsible="Ingeniero Líder de Infraestructura TI · Jefe de Infraestructura TI"
       description="Comparación entre los reportes de cesantes y la existencia de accesos internos. Los grupos RDP y aplicaciones pueden consultarse por LDAP si la configuración TLS corporativa lo permite. SASE continúa pendiente."/>
-    <EvidenceKpis metrics={null}/>
     <InfoBanner caution>Este control no debe usar la tabla de VPN externas de Check Point del control 7. La reunión describió fuentes de accesos <strong>internos</strong>, incluyendo SASE y LDAP. Los grupos RDP y aplicaciones pueden consultarse por LDAP en modo solo lectura; no se ejecutan bajas ni se integra SASE.</InfoBanner>
     {/* En escritorio la navegación está en el sidebar; solo queda aquí para móvil. */}
     <nav aria-label="Secciones del control 6 (móvil)" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:hidden">

@@ -22,7 +22,6 @@ import AuditLogs from "../pages/SOX/Control_7/AuditLogs";
 import UnparametrizedVpnsPage from "../pages/SOX/Control_7/UnparametrizedVpnsPage";
 
 // Configuración SOX
-import Settings from "../pages/SOX/Control_7/Settings";
 import Users from "../pages/Admin/Users";
 
 const STANDARD_ROLES = [
@@ -48,7 +47,6 @@ export const soxRoutes = (
   <>
     {/* Rutas antiguas: ahora viven dentro del layout del Control 7 (con sidebar). */}
     <Route path="/admin/users" element={<Navigate to="/SOX/Controls/Control_7/users" replace />} />
-    <Route path="/admin/settings" element={<Navigate to="/SOX/Controls/Control_7/settings" replace />} />
 
     {/* CONTROL 1 */}
     <Route
@@ -190,11 +188,6 @@ export const soxRoutes = (
       <Route
         path="logs"
         element={<AuditLogs />}
-      />
-
-      <Route
-        path="settings"
-        element={<PrivateRoute allowedRoles={["administrador"]}><Settings /></PrivateRoute>}
       />
 
       <Route
