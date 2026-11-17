@@ -6,6 +6,7 @@ import {
 } from "../../../services/sox/common/controlEvidence";
 import { FIELD, PRIMARY, SECONDARY, Panel } from "../common/ControlUI";
 import ControlMailPanel from "../common/ControlMailPanel";
+import { formatDateTime, todayEcuador } from "../../../utils/dateTime";
 
 // Un correo SALIENTE no es la aprobación (la emite Jefatura); por eso no se ofrece ese tipo.
 const MAIL_TYPES = [
@@ -55,8 +56,8 @@ const TYPES = [
   ["ejecucion", "Evidencia de cambio ejecutado"],
   ["solicitud", "Correo o requerimiento de cambio"],
 ];
-const fmt = (v) => v ? String(v).replace("T", " ").slice(0, 19) : "—";
-const today = () => new Date().toLocaleDateString("en-CA");
+const fmt = (v) => formatDateTime(v);
+const today = () => todayEcuador();
 
 function Notice({ children, error = false }) {
   return <div className={`rounded-xl border p-3 text-sm ${error ? "border-red-200 bg-red-50 text-red-700" : "border-blue-200 bg-blue-50 text-blue-800"}`}>{children}</div>;
@@ -140,7 +141,7 @@ export default function Control5Events({ year, evidences = [], canWrite, canVeri
 
   function EvidenceList({ items }) {
     return items.length ? <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-sm">
-      <thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3">Fecha carga (UTC)</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead>
+      <thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3">Fecha carga</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead>
       <tbody>{items.map((doc) => <tr key={doc.id} className="border-t border-slate-100"><td className="p-3"><span className="font-medium">{doc.nombre_archivo}</span><p className="text-xs text-slate-500">Cargado por {doc.creado_por}</p></td><td className="p-3">{doc.tipo}</td><td className="whitespace-nowrap p-3">{fmt(doc.creado_en)}</td><td className="p-3">{doc.estado}</td><td className="p-3"><div className="flex flex-wrap gap-2">
         <button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(5, doc.id, doc.nombre_archivo).catch((err) => setError(err.message))}>Descargar</button>
         {canVerify && doc.estado === "CARGADA" && <button type="button" disabled={busy} className={SECONDARY} onClick={() => verify(doc)}>Verificar</button>}

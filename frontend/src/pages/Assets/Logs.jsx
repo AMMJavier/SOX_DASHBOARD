@@ -11,6 +11,7 @@ import {
 import {
   exportAssetHistoryExcel, exportAssetHistoryPdf,
 } from "../../utils/assets/exportAssetHistory";
+import { formatDateTime, todayEcuador } from "../../utils/dateTime";
 
 const PAGE_SIZE = 20;
 const DETAIL_PAGE_SIZE = 100;
@@ -26,7 +27,7 @@ const FIELDS = [
 
 function formatDate(value) {
   if (!value) return "—";
-  const [date, time = ""] = String(value).split("T");
+  const [date, time = ""] = formatDateTime(value, { assumeUtc: false }).split(" ");
   const [year, month, day] = date.split("-");
   if (!year || !month || !day) return String(value);
   return `${day}/${month}/${year} ${time.split(".")[0]}`.trim();
@@ -160,7 +161,7 @@ export default function Logs() {
         setError("No hay modificaciones que coincidan con los filtros seleccionados.");
         return;
       }
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayEcuador();
       if (format === "excel") {
         exportAssetHistoryExcel(logs, `Assets_Historial_${stamp}.xlsx`);
       } else {

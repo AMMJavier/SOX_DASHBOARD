@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { nowEcuador } from "../../dateTime";
 
 /**
  * Exporta a PDF exactamente las filas recibidas (las que se ven en pantalla, con sus filtros)
@@ -12,7 +13,7 @@ export function exportToPdf(data, fileName = "reporte-sox.pdf", columns, title =
   doc.setFontSize(13);
   doc.text(title, 14, 14);
   doc.setFontSize(9);
-  doc.text(`Registros: ${rows.length} · Generado: ${new Date().toLocaleString()}`, 14, 20);
+  doc.text(`Registros: ${rows.length} · Generado: ${nowEcuador()}`, 14, 20);
   autoTable(doc, {
     startY: 25,
     head: [columns.map((c) => c.header)],

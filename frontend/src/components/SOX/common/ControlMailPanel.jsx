@@ -3,6 +3,7 @@ import { Mail, Paperclip, RotateCcw, Send, X } from "lucide-react";
 import { archiveControlMail, getMailConfig, listControlMails, newIdempotencyKey, sendControlMail } from "../../../services/sox/common/controlMail";
 import { downloadControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { FIELD, InfoBanner, Panel, PRIMARY, SECONDARY } from "./ControlUI";
+import { formatDateTime } from "../../../utils/dateTime";
 
 const STATUS = {
   PENDIENTE: { label: "Sin confirmar", className: "text-amber-700", help: "Graph no confirmó el envío; revisar el buzón antes de reenviar." },
@@ -206,11 +207,11 @@ export default function ControlMailPanel({
       {items.length === 0
         ? <p className="text-sm text-slate-500">No hay correos enviados desde SOX en este período.</p>
         : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
-            <th className="px-3 py-3">Fecha (UTC)</th><th className="px-3 py-3">Asunto / destinatarios</th><th className="px-3 py-3">Estado</th><th className="px-3 py-3">Evidencia</th>
+            <th className="px-3 py-3">Fecha</th><th className="px-3 py-3">Asunto / destinatarios</th><th className="px-3 py-3">Estado</th><th className="px-3 py-3">Evidencia</th>
           </tr></thead><tbody>{items.map((item) => {
             const status = STATUS[item.estado] || { label: item.estado, className: "text-slate-700" };
             return <tr key={item.id} className="border-t border-slate-100 align-top">
-              <td className="whitespace-nowrap px-3 py-3 text-slate-600">{(item.fecha_envio || item.fecha_solicitud)?.replace("T", " ").slice(0, 19)}<p className="text-xs text-slate-500">#{item.id} · {item.solicitado_por}</p></td>
+              <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.fecha_envio || item.fecha_solicitud)}<p className="text-xs text-slate-500">#{item.id} · {item.solicitado_por}</p></td>
               <td className="px-3 py-3"><p className="flex items-center gap-2 font-semibold text-slate-800"><Mail size={15} className="shrink-0 text-blue-600"/>{item.asunto}</p>
                 <p className="text-xs text-slate-500">Para: {item.destinatarios}{item.cc ? ` · CC: ${item.cc}` : ""}</p>
                 {item.adjuntos && <p className="text-xs text-slate-500">Adjuntos: {item.adjuntos}</p>}</td>

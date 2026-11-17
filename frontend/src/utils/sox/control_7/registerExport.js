@@ -1,3 +1,5 @@
+import { nowEcuador } from "../../dateTime";
+
 export function registerExport({ type, module, description, records }) {
   const saved = JSON.parse(localStorage.getItem("exportsHistory")) || [];
   const user = JSON.parse(localStorage.getItem("soxUser"));
@@ -9,7 +11,7 @@ export function registerExport({ type, module, description, records }) {
     description,
     records,
     user: user?.username || user?.name || "Usuario",
-    date: new Date().toLocaleString(),
+    date: nowEcuador(),
   };
 
   const updated = [newExport, ...saved];

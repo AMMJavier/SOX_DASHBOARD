@@ -7,6 +7,7 @@ import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, Requirement
 import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
 import ControlMailPanel from "./ControlMailPanel";
+import { formatDateTime } from "../../../utils/dateTime";
 
 // Controles con correo formal + archivado automático.
 const MAIL_CONTROLS = [1, 2, 3];
@@ -214,9 +215,9 @@ export default function ControlWorkspace({ config }) {
         {loadingRecords ? <p className="text-sm text-slate-500">Consultando evidencias...</p> : evidences.length === 0
           ? <Empty title="Sin evidencias registradas" description="No existen documentos cargados en el período seleccionado."/>
           : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
-              <th className="px-3 py-3">Fecha de carga (UTC)</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Tipo / referencia</th><th className="px-3 py-3">Revisión</th><th className="px-3 py-3">Acciones</th>
+              <th className="px-3 py-3">Fecha de carga</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Tipo / referencia</th><th className="px-3 py-3">Revisión</th><th className="px-3 py-3">Acciones</th>
             </tr></thead><tbody>{evidences.map((item) => <tr key={item.id} className="border-t border-slate-100">
-              <td className="whitespace-nowrap px-3 py-3 text-slate-600">{item.creado_en?.replace("T", " ").slice(0, 19)}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.creado_en)}</td>
               <td className="px-3 py-3"><p className="font-semibold text-slate-800">{item.nombre_archivo}</p><p className="text-xs text-slate-500">Subió: {item.creado_por}</p></td>
               <td className="px-3 py-3"><p>{config.evidence.find((x) => x.key === item.tipo)?.label || item.tipo}</p><p className="text-xs text-slate-500">{item.referencia || "Sin referencia"}</p></td>
               <td className="px-3 py-3"><span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span></td>
@@ -268,10 +269,10 @@ export default function ControlWorkspace({ config }) {
         ]}/>}
     </div>)}
 
-    {currentView === "historial" && <Panel title="Historial de actividad" description="Registro auditado de cargas, consultas y revisiones; fecha y hora en UTC.">
+    {currentView === "historial" && <Panel title="Historial de actividad" description="Registro auditado de cargas, consultas y revisiones; fecha y hora de Ecuador (UTC-5).">
       {history.length === 0 ? <Empty title="Sin eventos de auditoría" description="No hay cambios registrados para el período seleccionado."/>
-        : <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="px-3 py-3">Fecha (UTC)</th><th className="px-3 py-3">Acción</th><th className="px-3 py-3">Documento / cuenta</th><th className="px-3 py-3">Usuario</th></tr></thead>
-            <tbody>{history.map((item) => <tr key={item.id} className="border-t"><td className="px-3 py-3">{item.fecha?.replace("T", " ").slice(0, 19)}</td><td className="px-3 py-3">{item.accion}</td><td className="px-3 py-3">{item.archivo}{item.cuenta_evento ? <p className="text-xs text-slate-500">Cuenta: {item.cuenta_evento} · Evento #{item.evento_id}</p> : null}</td><td className="px-3 py-3">{item.usuario}</td></tr>)}</tbody></table></div>}
+        : <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="px-3 py-3">Fecha</th><th className="px-3 py-3">Acción</th><th className="px-3 py-3">Documento / cuenta</th><th className="px-3 py-3">Usuario</th></tr></thead>
+            <tbody>{history.map((item) => <tr key={item.id} className="border-t"><td className="px-3 py-3">{formatDateTime(item.fecha)}</td><td className="px-3 py-3">{item.accion}</td><td className="px-3 py-3">{item.archivo}{item.cuenta_evento ? <p className="text-xs text-slate-500">Cuenta: {item.cuenta_evento} · Evento #{item.evento_id}</p> : null}</td><td className="px-3 py-3">{item.usuario}</td></tr>)}</tbody></table></div>}
     </Panel>}
 
     {currentView === "alertas" && <div className="space-y-5">

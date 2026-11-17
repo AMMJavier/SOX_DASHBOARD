@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getLatestC6Cut, getC6CutAccounts, syncC6Ldap } from "../../../services/sox/control_6/cortes";
 import { Panel, FIELD, PRIMARY, SECONDARY, InfoBanner } from "../common/ControlUI";
+import { formatDateTime } from "../../../utils/dateTime";
 
 const PAGE_SIZE = 25;
 
@@ -72,9 +73,9 @@ export default function LdapCortesTable({ onUseAccounts }) {
         <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">RDP</p><strong className="text-lg">{cut.rdp}</strong></div>
         <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">Aplicaciones</p><strong className="text-lg">{cut.aplicaciones}</strong></div>
         <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">Cuentas únicas</p><strong className="text-lg">{cut.cuentas_unicas}</strong></div>
-        <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">Registro Oracle (UTC)</p><strong className="text-xs">{cut.fuente} · {cut.fecha_registro_utc?.replace("T", " ").slice(0, 19)}</strong></div>
+        <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">Registro Oracle</p><strong className="text-xs">{cut.fuente} · {formatDateTime(cut.fecha_registro_utc)}</strong></div>
       </div>
-      <p className="mb-3 text-xs text-slate-600">Extracción LDAP original (UTC): {cut.fecha_extraccion_utc?.replace("T", " ").slice(0, 19) || "No indicada en la importación"}</p>
+      <p className="mb-3 text-xs text-slate-600">Extracción LDAP original: {formatDateTime(cut.fecha_extraccion_utc, { fallback: "No indicada en la importación" })}</p>
       <div className="mb-3 flex flex-wrap gap-3">
         <input aria-label="Buscar usuario LDAP" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Buscar usuario" className={`${FIELD} max-w-xs`} />
         <button className={SECONDARY} type="button" onClick={() => { setPage(0); setQuery(input); }}>Buscar</button>

@@ -5,6 +5,7 @@ import {
   getControlEvidences, getControlHistory, uploadControlEvidence,
   downloadControlEvidence, verifyControlEvidence,
 } from "../../../services/sox/common/controlEvidence";
+import { formatDateTime } from "../../../utils/dateTime";
 
 const TYPES = [
   ["rrhh", "Correo / matriz de RR. HH."],
@@ -55,7 +56,7 @@ export default function Control6Repository({ historyOnly = false }) {
     catch (e) { setError(e.message); }
   }
 
-  const date = (value) => String(value || "—").replace("T", " ").slice(0, 19);
+  const date = (value) => formatDateTime(value);
   return <div className="space-y-5">
     <Panel title={historyOnly ? "Historial documental" : "Evidencias del Control 6"}
       description="Los documentos se organizan por año y semestre; no se comparten con el Control 7.">
@@ -71,15 +72,15 @@ export default function Control6Repository({ historyOnly = false }) {
       </div>
     </Panel>
     {error && <InfoBanner caution>{error}</InfoBanner>}
-    {historyOnly ? <Panel title="Acciones registradas" description="Fechas almacenadas en UTC; registro de cargas, descargas y revisiones.">
-      <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha (UTC)</th><th className="p-3">Acción</th><th className="p-3">Documento</th><th className="p-3">Usuario</th></tr></thead><tbody>
+    {historyOnly ? <Panel title="Acciones registradas" description="Fechas en hora de Ecuador (UTC-5); registro de cargas, descargas y revisiones.">
+      <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha</th><th className="p-3">Acción</th><th className="p-3">Documento</th><th className="p-3">Usuario</th></tr></thead><tbody>
         {history.map((h) => <tr className="border-t" key={h.id}><td className="p-3">{date(h.fecha)}</td><td className="p-3">{h.accion}</td><td className="p-3">{h.archivo}</td><td className="p-3">{h.usuario}</td></tr>)}
         {!history.length && <tr><td colSpan={4} className="p-7 text-center text-slate-500">No hay acciones registradas.</td></tr>}
       </tbody></table></div>
     </Panel> : <>
       <InfoBanner caution>Los documentos pueden contener datos personales de RR. HH. La carga y descarga están limitadas al equipo SOX autorizado. No se realiza ninguna eliminación automática de accesos.</InfoBanner>
       <Panel title="Documentos guardados">
-        <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha (UTC)</th><th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3">Revisión</th><th className="p-3">Acciones</th></tr></thead><tbody>
+        <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha</th><th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3">Revisión</th><th className="p-3">Acciones</th></tr></thead><tbody>
           {items.map((e) => <tr key={e.id} className="border-t"><td className="p-3">{date(e.creado_en)}</td><td className="p-3"><strong>{e.nombre_archivo}</strong><p className="text-xs text-slate-500">{e.creado_por}</p></td><td className="p-3">{TYPES.find((x) => x[0] === e.tipo)?.[1] || e.tipo}</td><td className="p-3">{e.estado}</td><td className="p-3"><div className="flex gap-2"><button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(6, e.id, e.nombre_archivo).catch((x) => setError(x.message))}>Descargar</button>{isAdmin && e.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verify(e.id)}>Verificar</button>}</div></td></tr>)}
           {!items.length && <tr><td colSpan={5} className="p-7 text-center text-slate-500">No hay documentos para el período.</td></tr>}
         </tbody></table></div>

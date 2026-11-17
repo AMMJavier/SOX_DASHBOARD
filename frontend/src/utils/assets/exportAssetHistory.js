@@ -2,6 +2,7 @@ import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatDateTime, nowEcuador } from "../dateTime";
 
 function printable(value) {
   const text = value === null || value === undefined ? "" : String(value).trim();
@@ -16,7 +17,7 @@ function safeExcel(value) {
 
 function formatDate(value) {
   if (!value) return "";
-  const [day, time = ""] = String(value).split("T");
+  const [day, time = ""] = formatDateTime(value, { assumeUtc: false }).split(" ");
   const [year, month, date] = day.split("-");
   if (!year || !month || !date) return String(value);
   return `${date}/${month}/${year} ${time.split(".")[0]}`.trim();
@@ -77,7 +78,7 @@ export function exportAssetHistoryPdf(logs, filename = "Assets_Historial_Complet
   doc.setFontSize(15);
   doc.text("HITSS / Assets - Historial de modificaciones", 12, 14);
   doc.setFontSize(9);
-  doc.text(`Cambios exportados: ${rows.length} | Generado: ${new Date().toLocaleString("es-EC")}`, 12, 21);
+  doc.text(`Cambios exportados: ${rows.length} | Generado: ${nowEcuador()}`, 12, 21);
   autoTable(doc, {
     startY: 27,
     head: [["Fecha", "ID", "Dispositivo", "Serial", "Campo", "Anterior", "Nuevo", "Usuario", "Origen"]],

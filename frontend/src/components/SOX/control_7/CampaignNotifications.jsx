@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Mail, RefreshCw, Send } from "lucide-react";
 import { readStoredUser } from "../../../services/authSession";
 import { getCampaignNotifications, sendCampaignNotifications } from "../../../services/sox/control_7/campaignService";
+import { formatDateTime } from "../../../utils/dateTime";
 
 const CONTACT = {
   LISTO: { label: "Correo encontrado", className: "text-emerald-700" },
@@ -115,7 +116,7 @@ export default function CampaignNotifications() {
               <td className="border-b p-3">{g.correo || "-"}</td>
               <td className={`border-b p-3 font-semibold ${contact.className}`}>{contact.label}</td>
               <td className="border-b p-3">{notice ? <span className={`font-semibold ${notice.className}`}>{notice.label}</span> : "No enviado"}
-                {g.fecha_envio && <p className="text-xs text-slate-500">{String(g.fecha_envio).replace("T", " ").slice(0, 16)} UTC</p>}
+                {g.fecha_envio && <p className="text-xs text-slate-500">{formatDateTime(g.fecha_envio, { seconds: false })}</p>}
                 {g.detalle && <p className="text-xs text-slate-500">{g.detalle}</p>}
                 {g.intentos > 1 && <p className="text-xs text-slate-500">{g.intentos} intentos</p>}</td>
               <td className="border-b p-3">{g.enviable && <button type="button" disabled={!data.envio_habilitado || data.en_proceso}

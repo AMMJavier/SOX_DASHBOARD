@@ -1,4 +1,5 @@
 import { api } from "../../api";
+import { nowEcuador } from "../../../utils/dateTime";
 
 export async function getHistory(filters = {}) {
   const response = await api.get("/sox/history", {
@@ -25,7 +26,7 @@ export function registerExport({ type, module, description, records, filters }) 
     records,
     filters,
     user: user?.name || "Usuario",
-    date: new Date().toLocaleString(),
+    date: nowEcuador(),
   };
 
   const updated = [newExport, ...saved];

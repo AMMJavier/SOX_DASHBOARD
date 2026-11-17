@@ -4,6 +4,7 @@ import { Panel, FIELD, PRIMARY, SECONDARY, InfoBanner } from "../common/ControlU
 import { getLatestC6Cut } from "../../../services/sox/control_6/cortes";
 import { previewC6Conciliation, saveC6Conciliation, listC6Conciliations } from "../../../services/sox/control_6/conciliations";
 import { downloadControlEvidence } from "../../../services/sox/common/controlEvidence";
+import { formatDateTime } from "../../../utils/dateTime";
 
 const currentYear = new Date().getFullYear();
 const currentSemester = new Date().getMonth() < 6 ? "1" : "2";
@@ -132,9 +133,9 @@ export default function Control6Conciliation({ onViewEvidences }) {
       </Panel>
     </>}
     <Panel title="Conciliaciones registradas" description="Cada registro conserva el corte LDAP, el período, el responsable y un informe descargable en Evidencias del Control 6.">
-      <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha UTC</th><th className="p-3">Corte</th><th className="p-3">RR. HH.</th><th className="p-3">Hallazgos</th><th className="p-3">Estado</th><th className="p-3">Informe</th></tr></thead>
+      <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Fecha</th><th className="p-3">Corte</th><th className="p-3">RR. HH.</th><th className="p-3">Hallazgos</th><th className="p-3">Estado</th><th className="p-3">Informe</th></tr></thead>
         <tbody>{history.map((h) => <tr className="border-b border-slate-100" key={h.id}>
-          <td className="p-3">{h.creado_en?.replace("T", " ").slice(0, 19)}</td>
+          <td className="p-3">{formatDateTime(h.creado_en)}</td>
           <td className="p-3">#{h.corte_id} · {h.anio}/S{h.semestre}</td>
           <td className="p-3">{h.fuente_rrhh} · {h.total_rrhh} cuentas</td>
           <td className="p-3">{h.coincidencias} coincidencias · {h.ambiguos} ambiguos</td>
