@@ -27,16 +27,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_PATH = Path(__file__).resolve().parents[3] / "config" / "formatos.json"
 FORMATS = {"pdf", "eml", "ambos"}
 CODE_RE = re.compile(r"\[SOX\s+(\d{3}-\d+(?:\.\d+)?)\]", re.IGNORECASE)
+APPROVAL_WORDS = ["ok", "okay", "okey", "aprobado", "aprobada", "aprobados", "aprobadas", "apruebo", "aprobamos"]
 DEFAULTS = {
     "revision_respuestas_min": 10,
+    "palabras_aprobacion": APPROVAL_WORDS,
     "controles": {
-        "1": {
-            "codigo": "001",
-            "formato_archivo": "pdf",
-            "tipo_evidencia_notificacion": "solicitud",
-            "respuestas": {"activo": True, "palabras_aprobacion": ["ok", "aprobado", "aprobada", "apruebo"],
-                           "tipo_evidencia": "aprobacion"},
-        },
+        "1": {"codigo": "001", "formato_archivo": "pdf", "tipo_evidencia_notificacion": "solicitud",
+              "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
+        "2": {"codigo": "002", "formato_archivo": "pdf", "tipo_evidencia_notificacion": "revision",
+              "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
+        "3": {"codigo": "003", "formato_archivo": "pdf", "tipo_evidencia_notificacion": "avance",
+              "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
     },
 }
 _lock = threading.Lock()
@@ -82,7 +83,10 @@ def settings(control) -> dict | None:
         logger.error("formatos.json: formato_archivo %r inválido en el Control %s; se usa pdf", fmt, control)
         fmt = "pdf"
     replies = raw.get("respuestas") or {}
-    words = [str(w).strip().casefold() for w in (replies.get("palabras_aprobacion") or ["ok"]) if str(w).strip()]
+    # Palabras de aprobación: las del control o, si no tiene, la lista general de formatos.json.
+    # La comparación ignora mayúsculas y tildes ("OK", "Ok", "ok", "Aprobado", "APROBADA"...).
+    source = replies.get("palabras_aprobacion") or load().get("palabras_aprobacion") or APPROVAL_WORDS
+    words = [str(w).strip().casefold() for w in source if str(w).strip()]
     return {
         "codigo": code,
         "formato_archivo": fmt,

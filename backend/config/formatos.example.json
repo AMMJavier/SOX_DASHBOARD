@@ -5,20 +5,30 @@
     "Un control que no aparece en 'controles' sigue funcionando como antes (sin código ni lectura de respuestas)."
   ],
   "_formato_archivo": "Cómo se guarda en la plataforma cada correo enviado y cada respuesta: \"pdf\" (un solo PDF legible), \"eml\" (original) o \"ambos\".",
+  "_codigo": "Código del control en el asunto: [SOX 002-1]. -1 es el correo del período; un reenvío en el mismo período es -1.1, -1.2...; otro año (o semestre en el Control 3) pasa a -2.",
   "_revision_respuestas_min": "Cada cuántos minutos se revisa el buzón buscando respuestas (además del botón 'Buscar respuestas').",
   "revision_respuestas_min": 10,
+  "_palabras_aprobacion": "Si la respuesta de un destinatario contiene alguna de estas palabras (sin importar mayúsculas ni tildes), el correo pasa a Aprobado. Un control puede tener su propia lista en respuestas.palabras_aprobacion.",
+  "palabras_aprobacion": ["ok", "okay", "okey", "aprobado", "aprobada", "aprobados", "aprobadas", "apruebo", "aprobamos"],
   "controles": {
     "1": {
       "codigo": "001",
       "formato_archivo": "pdf",
       "_tipo_evidencia_notificacion": "Tipo con el que se archiva la notificación enviada (clave de evidencia del control).",
       "tipo_evidencia_notificacion": "solicitud",
-      "respuestas": {
-        "activo": true,
-        "_palabras_aprobacion": "Si la respuesta de un destinatario contiene alguna de estas palabras, el correo pasa a Aprobado.",
-        "palabras_aprobacion": ["ok", "aprobado", "aprobada", "apruebo"],
-        "tipo_evidencia": "aprobacion"
-      }
+      "respuestas": { "activo": true, "tipo_evidencia": "aprobacion" }
+    },
+    "2": {
+      "codigo": "002",
+      "formato_archivo": "pdf",
+      "tipo_evidencia_notificacion": "revision",
+      "respuestas": { "activo": true, "tipo_evidencia": "aprobacion" }
+    },
+    "3": {
+      "codigo": "003",
+      "formato_archivo": "pdf",
+      "tipo_evidencia_notificacion": "avance",
+      "respuestas": { "activo": true, "tipo_evidencia": "aprobacion" }
     }
   }
 }
