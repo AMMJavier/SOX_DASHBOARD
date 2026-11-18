@@ -210,14 +210,19 @@ export default function ControlMailPanel({
 
     <Panel title="Correos enviados desde SOX" description={eventId ? `Correos de este evento (#${eventId}) y su archivado en el expediente.` : "Estado del envío y de su archivado como evidencia del período seleccionado."}>
       {items.length === 0
-        ? <p className="text-sm text-slate-500">No hay correos enviados desde SOX en este período.</p>
+        ? <p className="text-sm text-slate-500">No hay correos ni notificaciones enviados desde SOX en este período.</p>
         : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
             <th className="px-3 py-3">Fecha</th><th className="px-3 py-3">Asunto / destinatarios</th><th className="px-3 py-3">Estado</th><th className="px-3 py-3">Evidencia</th>
           </tr></thead><tbody>{items.map((item) => {
-            const status = STATUS[item.estado] || { label: item.estado, className: "text-slate-700" };
+            const isNotice = item.origen === "RECORDATORIO";
+            // Notificación sin código: el envío es su estado final (no se archiva como evidencia).
+            const status = isNotice && !item.codigo && item.estado === "ACEPTADO"
+              ? { label: "Enviada", className: "text-emerald-700" }
+              : STATUS[item.estado] || { label: item.estado, className: "text-slate-700" };
             return <tr key={item.id} className="border-t border-slate-100 align-top">
               <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.fecha_envio || item.fecha_solicitud)}<p className="text-xs text-slate-500">#{item.id} · {item.solicitado_por}</p></td>
               <td className="px-3 py-3"><p className="flex items-center gap-2 font-semibold text-slate-800"><Mail size={15} className="shrink-0 text-blue-600"/>{item.asunto}</p>
+                <p className="text-xs font-semibold text-slate-500">{isNotice ? (item.tipo === "alerta" ? "Alerta automática" : "Notificación") : "Correo formal"}</p>
                 <p className="text-xs text-slate-500">Para: {item.destinatarios}{item.cc ? ` · CC: ${item.cc}` : ""}</p>
                 {item.adjuntos && <p className="text-xs text-slate-500">Adjuntos: {item.adjuntos}</p>}</td>
               <td className="px-3 py-3"><span className={`font-semibold ${status.className}`}>{status.label}</span>
@@ -226,7 +231,7 @@ export default function ControlMailPanel({
               <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
                 {item.evidencia_eml_id && <button type="button" className={SECONDARY} onClick={() => download(item.evidencia_eml_id, item.eml_nombre)}>EML</button>}
                 {item.evidencia_pdf_id && <button type="button" className={SECONDARY} onClick={() => download(item.evidencia_pdf_id, item.pdf_nombre)}>PDF</button>}
-                {item.estado === "ACEPTADO" && <button type="button" disabled={busy} className={PRIMARY} onClick={() => handleArchive(item.id)}>Reintentar archivado</button>}
+                {item.estado === "ACEPTADO" && (!isNotice || item.codigo) && <button type="button" disabled={busy} className={PRIMARY} onClick={() => handleArchive(item.id)}>Reintentar archivado</button>}
               </div></td>
             </tr>;
           })}</tbody></table></div>}

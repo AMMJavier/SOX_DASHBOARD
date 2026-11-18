@@ -16,6 +16,7 @@ const NOTIFY_CONTROLS = [1, 2, 3];
 // Tipo de evidencia propuesto para el correo enviado (el usuario puede cambiarlo).
 const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
 // Estado de un correo con código (backend/config/formatos.json) según su respuesta.
+const EVIDENCE_PAGE_SIZE = 3;
 const REPLY_STATUS = {
   PENDIENTE: { label: "Pendiente", className: "text-amber-700", help: "Esperando la respuesta \"OK\"." },
   RESPONDIDO: { label: "Respondido · revisar", className: "text-blue-700", help: "Hay respuesta sin \"OK\" de un destinatario." },
@@ -65,6 +66,8 @@ export default function ControlWorkspace({ config }) {
   const [expanded, setExpanded] = useState([]);
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState("");
+  const [evidencePage, setEvidencePage] = useState(1);
+  useEffect(() => { setEvidencePage(1); }, [year, semester]);
   const [loadError, setLoadError] = useState("");
   const [refreshRecords, setRefreshRecords] = useState(0);
   const currentRole = readStoredUser()?.rol;
@@ -158,7 +161,12 @@ export default function ControlWorkspace({ config }) {
 
   const toggleExpanded = (id) => setExpanded((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   // Las respuestas archivadas se muestran dentro de su correo, no como fila aparte.
-  const evidenceRows = evidences.filter((e) => !e.respuesta_de);
+  const evidenceRows = evidences.filter((e) => !e.respuesta_de)
+    .sort((a, b) => String(b.creado_en || "").localeCompare(String(a.creado_en || "")) || b.id - a.id);
+  // Repositorio paginado: EVIDENCE_PAGE_SIZE por página, del más nuevo al más antiguo.
+  const pageCount = Math.max(1, Math.ceil(evidenceRows.length / EVIDENCE_PAGE_SIZE));
+  const currentPage = Math.min(evidencePage, pageCount);
+  const pageRows = evidenceRows.slice((currentPage - 1) * EVIDENCE_PAGE_SIZE, currentPage * EVIDENCE_PAGE_SIZE);
   const usesCodes = evidences.some((e) => e.codigo);
 
   async function verifyEvidence(id) {
@@ -254,7 +262,7 @@ export default function ControlWorkspace({ config }) {
           ? <Empty title="Sin evidencias registradas" description="No existen documentos cargados en el período seleccionado."/>
           : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
               <th className="px-3 py-3">Fecha de carga</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Tipo / referencia</th><th className="px-3 py-3">Revisión</th><th className="px-3 py-3">Acciones</th>
-            </tr></thead><tbody>{evidenceRows.map((item) => {
+            </tr></thead><tbody>{pageRows.map((item) => {
               const reply = item.codigo ? (REPLY_STATUS[item.estado_respuesta] || REPLY_STATUS.PENDIENTE) : null;
               const replies = item.respuestas || [];
               const open = expanded.includes(item.id);
@@ -284,7 +292,16 @@ export default function ControlWorkspace({ config }) {
                     {r.evidencia_id && <button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(config.number, r.evidencia_id, r.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar respuesta</button>}
                   </li>)}</ul>}
             </td></tr>];
-            })}</tbody></table></div>}
+            })}</tbody></table>
+            {evidenceRows.length > EVIDENCE_PAGE_SIZE && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+              <span>Mostrando {(currentPage - 1) * EVIDENCE_PAGE_SIZE + 1}–{Math.min(currentPage * EVIDENCE_PAGE_SIZE, evidenceRows.length)} de {evidenceRows.length} evidencias</span>
+              <div className="flex items-center gap-2">
+                <button type="button" className={SECONDARY} disabled={currentPage <= 1} onClick={() => setEvidencePage(currentPage - 1)}>Anterior</button>
+                <span className="px-2 font-semibold">Página {currentPage} de {pageCount}</span>
+                <button type="button" className={SECONDARY} disabled={currentPage >= pageCount} onClick={() => setEvidencePage(currentPage + 1)}>Siguiente</button>
+              </div>
+            </div>}
+          </div>}
       </Panel>
       {canWrite && <Panel title="Cargar evidencia" description="Archivos PDF, EML, MSG, Word, Excel o imágenes; máximo 15 MB por archivo.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

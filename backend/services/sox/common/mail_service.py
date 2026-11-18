@@ -349,7 +349,7 @@ def list_outbox(db, control, anio, semestre, evento_id=None):
     _check_control(control, anio, semestre)
     try:
         rows = db.execute(text(_SELECT + """
-             WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio AND o.ORIGEN = 'MANUAL'
+             WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio AND o.ORIGEN IN ('MANUAL', 'RECORDATORIO')
                AND ((:p_semestre IS NULL AND o.SEMESTRE IS NULL) OR o.SEMESTRE = :p_semestre)
                AND (:p_evento IS NULL OR o.EVENTO_ID = :p_evento)
              ORDER BY o.FECHA_SOLICITUD DESC, o.ID DESC FETCH FIRST 100 ROWS ONLY
