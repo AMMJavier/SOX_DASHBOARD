@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
 import { approveMailReply, downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, searchMailReplies, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
-import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, Download, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
@@ -17,6 +17,8 @@ const NOTIFY_CONTROLS = [1, 2, 3];
 const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
 // Estado de un correo con código (backend/config/formatos.json) según su respuesta.
 const EVIDENCE_PAGE_SIZE = 3;
+// Botón solo con ícono, mismo estilo que los secundarios del SOX.
+const ICON_BUTTON = "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 const REPLY_STATUS = {
   PENDIENTE: { label: "Pendiente", className: "text-amber-700", help: "Esperando la respuesta \"OK\"." },
   RESPONDIDO: { label: "Respondido · revisar", className: "text-blue-700", help: "Hay respuesta sin \"OK\" de un destinatario." },
@@ -275,8 +277,8 @@ export default function ControlWorkspace({ config }) {
                 ? <><span className={`font-semibold ${reply.className}`}>{reply.label}</span>
                     {reply.help && <p className="mt-1 max-w-[12rem] text-xs text-slate-500">{reply.help}</p>}</>
                 : <span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span>}</td>
-              <td className="px-3 py-3"><div className="flex flex-wrap gap-2"><button className={SECONDARY} type="button" onClick={() => downloadControlEvidence(config.number, item.id, item.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar</button>
-              {item.codigo && <button type="button" className={SECONDARY} onClick={() => toggleExpanded(item.id)} aria-expanded={open}>
+              <td className="px-3 py-3"><div className="flex flex-nowrap items-center gap-2"><button className={ICON_BUTTON} type="button" title="Descargar" aria-label={`Descargar ${item.nombre_archivo}`} onClick={() => downloadControlEvidence(config.number, item.id, item.nombre_archivo).catch((e) => setFeedback(e.message))}><Download size={17}/></button>
+              {item.codigo && <button type="button" className={`${SECONDARY} whitespace-nowrap`} onClick={() => toggleExpanded(item.id)} aria-expanded={open}>
                 {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}Respuestas ({replies.length})</button>}
               {item.codigo && canVerify && item.estado_respuesta === "RESPONDIDO" && <button type="button" className={PRIMARY} onClick={() => approveReply(item)}>Aprobar</button>}
               {!item.codigo && canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}</div></td>
@@ -289,7 +291,7 @@ export default function ControlWorkspace({ config }) {
                     <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{r.asunto || `Respuesta a ${item.codigo}`}</p>
                       <p className="text-xs text-slate-500">De {r.remitente || "remitente desconocido"} · {formatDateTime(r.fecha_recibido)} · {r.aprueba ? <span className="font-semibold text-emerald-700">OK detectado</span> : <span className="font-semibold text-blue-700">Sin OK automático</span>}</p>
                       {r.extracto && <p className="mt-1 line-clamp-2 text-xs text-slate-600">"{r.extracto}"</p>}</div>
-                    {r.evidencia_id && <button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(config.number, r.evidencia_id, r.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar respuesta</button>}
+                    {r.evidencia_id && <button type="button" className={ICON_BUTTON} title="Descargar respuesta" aria-label={`Descargar ${r.nombre_archivo || "respuesta"}`} onClick={() => downloadControlEvidence(config.number, r.evidencia_id, r.nombre_archivo).catch((e) => setFeedback(e.message))}><Download size={17}/></button>}
                   </li>)}</ul>}
             </td></tr>];
             })}</tbody></table>
