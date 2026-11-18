@@ -110,14 +110,17 @@ def allowed_domains() -> list:
 
 def cc(number) -> list:
     """Copias fijas: las generales más las del control."""
-    return _dedupe(_list(load().get("copias_generales")) + _list(control(number).get("copias")))
+    data = control(number)
+    return _dedupe(_list(load().get("copias_generales")) + _list(data.get("copias")) + _list(data.get("cc")))
 
 
 def notification(number) -> dict:
     """Notificación/recordatorio del control: destinatarios, copias propias, asunto y cuerpo."""
     data = control(number).get("notificacion") or {}
     recipients = _list(data.get("destinatarios")) or _list(os.getenv(f"SOX_REMINDER_TO_{number}", ""))
-    return {"destinatarios": _dedupe(recipients), "copias": _dedupe(_list(data.get("copias"))),
+    # "copias" o "cc": ambos nombres se aceptan en notificacion.
+    copies = _list(data.get("copias")) + _list(data.get("cc"))
+    return {"destinatarios": _dedupe(recipients), "copias": _dedupe(copies),
             "asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
 
 
