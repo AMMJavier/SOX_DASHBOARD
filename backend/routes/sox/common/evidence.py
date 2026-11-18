@@ -14,6 +14,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import text, Integer, outparam
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session
 
 from auth.dependencies import get_current_user
@@ -99,7 +100,12 @@ def listar_evidencias(
          ORDER BY e.CREADO_EN DESC, e.ID DESC
     """)
     items = [_serialize(row) for row in db.execute(sql, {"control": control, "anio": anio, "semestre": semestre}).mappings()]
-    _attach_mail_codes(db, control, items)
+    try:
+        _attach_mail_codes(db, control, items)
+    except DatabaseError as exc:  # Sin sox_mail_respuestas.sql: se listan las evidencias sin códigos.
+        db.rollback()
+        print(f"[SOX CORREO] Evidencias del Control {control} sin códigos de correo: ejecutar "
+              f"backend/sql/sox_mail_respuestas.sql | {str(exc).splitlines()[0][:200]}", flush=True)
     return {"items": items, "total": len(items),
             "metrics": {"total": len(items), "confirmed": sum(x["estado"] == "VERIFICADA" for x in items),
                         "pending": sum(x["estado"] == "CARGADA" for x in items), "expired": None}}

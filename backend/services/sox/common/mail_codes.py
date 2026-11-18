@@ -18,7 +18,9 @@ import re
 import threading
 from pathlib import Path
 
+from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.exc import DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +121,25 @@ def _period_filter():
             "AND ((:p_semestre IS NULL AND SEMESTRE IS NULL) OR SEMESTRE = :p_semestre)")
 
 
+MISSING_SQL = ("Faltan las columnas de código de correo en Oracle: ejecutar backend/sql/sox_mail_respuestas.sql "
+               "(o quitar el control de backend/config/formatos.json).")
+
+
 def next_code(db, control, anio, semestre):
     """(codigo, serie, reenvio) que tendría el próximo correo del período, o (None, None, None)."""
     cfg = settings(control)
     if not cfg:
         return None, None, None
+    try:
+        return _next_code(db, control, anio, semestre, cfg)
+    except DatabaseError as exc:
+        db.rollback()
+        logger.error("Código de correo no disponible (Control %s): %s", control, exc)
+        print(f"[SOX CORREO] {MISSING_SQL} Detalle: {str(exc).splitlines()[0][:200]}", flush=True)
+        raise HTTPException(503, MISSING_SQL)
+
+
+def _next_code(db, control, anio, semestre, cfg):
     params = {"p_control": control, "p_anio": anio, "p_semestre": semestre}
     serie = db.execute(text(f"""
         SELECT MAX(CODIGO_SERIE) FROM AUTOM.SOX_MAIL_OUTBOX

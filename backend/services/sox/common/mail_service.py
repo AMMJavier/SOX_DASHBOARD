@@ -33,7 +33,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import Integer, outparam, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DatabaseError, IntegrityError
 
 from routes.sox.common.evidence import EVIDENCE_TYPES, MAX_BYTES, _check_control, _storage_root
 from services.sox.common import mail_codes, mail_config
@@ -347,13 +347,18 @@ def _get(db, outbox_id=None, idem=None):
 
 def list_outbox(db, control, anio, semestre, evento_id=None):
     _check_control(control, anio, semestre)
-    rows = db.execute(text(_SELECT + """
-         WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio AND o.ORIGEN = 'MANUAL'
-           AND ((:p_semestre IS NULL AND o.SEMESTRE IS NULL) OR o.SEMESTRE = :p_semestre)
-           AND (:p_evento IS NULL OR o.EVENTO_ID = :p_evento)
-         ORDER BY o.FECHA_SOLICITUD DESC, o.ID DESC FETCH FIRST 100 ROWS ONLY
-    """), {"p_control": control, "p_anio": anio, "p_semestre": semestre, "p_evento": evento_id}).mappings()
-    return [_serialize(r) for r in rows]
+    try:
+        rows = db.execute(text(_SELECT + """
+             WHERE o.CONTROL_NUMERO = :p_control AND o.ANIO = :p_anio AND o.ORIGEN = 'MANUAL'
+               AND ((:p_semestre IS NULL AND o.SEMESTRE IS NULL) OR o.SEMESTRE = :p_semestre)
+               AND (:p_evento IS NULL OR o.EVENTO_ID = :p_evento)
+             ORDER BY o.FECHA_SOLICITUD DESC, o.ID DESC FETCH FIRST 100 ROWS ONLY
+        """), {"p_control": control, "p_anio": anio, "p_semestre": semestre, "p_evento": evento_id}).mappings()
+        return [_serialize(r) for r in rows]
+    except DatabaseError as exc:
+        db.rollback()
+        console(f"{mail_codes.MISSING_SQL} Detalle: {str(exc).splitlines()[0][:200]}")
+        raise HTTPException(503, mail_codes.MISSING_SQL)
 
 
 def _set_state(db, outbox_id, estado, detalle=None, **extra):
