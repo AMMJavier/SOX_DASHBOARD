@@ -20,6 +20,7 @@ import Reports from "../pages/SOX/Control_7/Reports";
 import Exceptions from "../pages/SOX/Control_7/Exceptions";
 import AuditLogs from "../pages/SOX/Control_7/AuditLogs";
 import UnparametrizedVpnsPage from "../pages/SOX/Control_7/UnparametrizedVpnsPage";
+import InternalVpns from "../pages/SOX/Control_7/InternalVpns";
 
 // Configuración SOX
 import Users from "../pages/Admin/Users";
@@ -198,6 +199,12 @@ export const soxRoutes = (
       <Route
         path="users"
         element={<PrivateRoute allowedRoles={["administrador"]}><Users /></PrivateRoute>}
+      />
+
+      {/* VPN internas (LDAP RDP / Aplicaciones): gerente o administración según el rol */}
+      <Route
+        path="internas"
+        element={<InternalVpns />}
       />
     </Route>
 

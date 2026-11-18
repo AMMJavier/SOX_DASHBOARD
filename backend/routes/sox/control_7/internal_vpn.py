@@ -1,0 +1,75 @@
+"""Control 7 - VPN internas (LDAP RDP / APLICACIONES).
+
+Gerente (rol gerencial): solo GET/PATCH fuera de /sox/admin (require_sox_access), y solo sobre
+sus propias cuentas (comprobado en services/sox/control_7/internal_vpn.decide).
+Administrador / desarrollador: listado completo, resumen por gerente y carga desde LDAP.
+"""
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
+from auth.dependencies import get_current_user
+from database.oracle_database import get_oracle_db
+from models import Usuario
+from services.sox.control_7 import internal_vpn as service
+
+router = APIRouter(tags=["SOX - Control 7 VPN internas"])
+ADMINS = {"administrador", "desarrollador"}
+
+
+class InternalDecision(BaseModel):
+    decision: str
+    observation: Optional[str] = None
+
+
+class InternalDecisionItem(InternalDecision):
+    id: int
+
+
+class InternalConfirmAll(BaseModel):
+    validations: List[InternalDecisionItem]
+
+
+def _admin(user: Usuario):
+    if user.rol not in ADMINS:
+        raise HTTPException(403, "Solo administradores SOX")
+
+
+@router.get("/internas/mine")
+def my_internal_accounts(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    """Cuentas con VPN interna a cargo del usuario en sesión (jefe según Active Directory)."""
+    return service.list_for_manager(db, current.username)
+
+
+@router.patch("/internas/confirm-all")
+def confirm_all_internal(payload: InternalConfirmAll, db: Session = Depends(get_oracle_db),
+                         current: Usuario = Depends(get_current_user)):
+    return service.confirm_all(db, items=payload.validations, user=current)
+
+
+@router.patch("/internas/{item_id}")
+def decide_internal(item_id: int, payload: InternalDecision, db: Session = Depends(get_oracle_db),
+                    current: Usuario = Depends(get_current_user)):
+    return service.decide(db, item_id=item_id, decision=payload.decision, observation=payload.observation,
+                          user=current)
+
+
+@router.get("/campaign/internas")
+def list_internal(search: str = Query("", max_length=100), gerente: str = Query("", max_length=100),
+                  estado: str = Query("", max_length=20), tipo: str = Query("", max_length=20),
+                  campaign_id: Optional[int] = Query(None), offset: int = Query(0, ge=0),
+                  limit: int = Query(50, ge=1, le=200),
+                  db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.list_admin(db, campaign_id=campaign_id, search=search, gerente=gerente, estado=estado,
+                              tipo=tipo, offset=offset, limit=limit)
+
+
+@router.post("/campaign/internas/cargar")
+async def load_internal(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    """Vuelve a tomar la foto LDAP de la campaña activa (conserva las decisiones ya confirmadas)."""
+    _admin(current)
+    return await run_in_threadpool(service.load_from_ldap, db)

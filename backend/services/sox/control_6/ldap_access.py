@@ -15,7 +15,7 @@ import ssl
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ldap3 import Connection, NONE, SIMPLE, SUBTREE, Server, Tls
+from ldap3 import BASE, Connection, NONE, SIMPLE, SUBTREE, Server, Tls
 from ldap3.utils.conv import escape_filter_chars
 
 logger = logging.getLogger(__name__)
@@ -129,21 +129,23 @@ def _first(value):
     return value
 
 
-def _direct_users(conn, base, group_dn, page_size, max_users):
+def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False):
     """Busca usuarios directamente miembros del grupo mediante páginas AD.
 
     No equivale a grupos anidados ni a sesiones VPN conectadas.
+    with_manager=True agrega el DN del jefe ("manager" de AD) en "manager_dn" (Control 7).
     """
     search_filter = (
         "(&(objectCategory=person)(objectClass=user)(memberOf="
         + escape_filter_chars(group_dn) + "))"
     )
     accounts = {}
+    attributes = ["sAMAccountName", "displayName", "userAccountControl"] + (["manager"] if with_manager else [])
     rows = conn.extend.standard.paged_search(
         search_base=base,
         search_filter=search_filter,
         search_scope=SUBTREE,
-        attributes=["sAMAccountName", "displayName", "userAccountControl"],
+        attributes=attributes,
         paged_size=page_size,
         generator=True,
     )
@@ -166,9 +168,67 @@ def _direct_users(conn, base, group_dn, page_size, max_users):
         except (ValueError, TypeError):
             enabled = None
         accounts[username] = {"usuario": username, "nombre": display, "activo": enabled}
+        if with_manager:
+            accounts[username]["manager_dn"] = str(_first(attrs.get("manager")) or "").strip() or None
         if len(accounts) > max_users:
             raise LDAPAccessError("El grupo LDAP supera el máximo configurado")
     return accounts
+
+
+def _resolve_manager(conn, dn):
+    """Datos del jefe a partir de su DN (búsqueda BASE). None si no se encuentra."""
+    try:
+        conn.search(search_base=dn, search_scope=BASE, search_filter="(objectClass=user)",
+                    attributes=["sAMAccountName", "displayName", "mail"], size_limit=1)
+    except Exception:
+        return None
+    if len(conn.entries) != 1:
+        return None
+    attrs = conn.entries[0].entry_attributes_as_dict
+    username = str(_first(attrs.get("sAMAccountName")) or "").strip().lower()
+    if not username:
+        return None
+    return {"usuario": username[:100],
+            "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
+            "correo": (str(_first(attrs.get("mail")) or "").strip() or None)}
+
+
+def read_internal_access_with_managers():
+    """Control 7 (VPN internas): membresías RDP/APLICACIONES con el jefe de cada cuenta.
+
+    Devuelve una fila por (cuenta, grupo): usuario, nombre, activo, tipo_acceso y
+    gerente {usuario, nombre, correo} o None si AD no tiene "manager" para la cuenta.
+    """
+    page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
+    max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
+    conn = None
+    try:
+        conn, base = _open_connection()
+        rows, managers = [], {}
+        for access_type, group_name in LDAP_GROUPS.items():
+            dn = _group_dn(conn, base, group_name)
+            group_users = _direct_users(conn, base, dn, page_size, max_users, with_manager=True)
+            if not group_users:
+                raise LDAPAccessError("El grupo LDAP " + access_type + " no devolvió cuentas")
+            for info in group_users.values():
+                manager_dn = info.pop("manager_dn", None)
+                if manager_dn and manager_dn not in managers:
+                    managers[manager_dn] = _resolve_manager(conn, manager_dn)
+                rows.append({**info, "tipo_acceso": access_type,
+                             "gerente": managers.get(manager_dn) if manager_dn else None})
+        return {"filas": rows, "gerentes": len([m for m in managers.values() if m]),
+                "consulta_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    except LDAPAccessError:
+        raise
+    except Exception as exc:
+        logger.warning("Control 7 internas: lectura LDAP fallida (%s)", type(exc).__name__)
+        raise LDAPAccessError("No se completó la consulta LDAP de VPN internas") from exc
+    finally:
+        if conn is not None:
+            try:
+                conn.unbind()
+            except Exception:
+                pass
 
 
 def read_internal_access():

@@ -444,6 +444,21 @@ def start_campaign():
             contactos = {"omitido": True,
                          "motivo": "sincronizar_contactos_ldap=false en correos.json: se conservan los correos actuales"}
 
+        # 5b. VPN internas (LDAP RDP / APLICACIONES) en la misma campaña. Si LDAP falla la
+        # campaña de externas sigue en pie: se reintenta con "Cargar desde LDAP" en VPN internas.
+        from database.oracle_database import SessionLocal as _InternalSession
+        from services.sox.control_7.internal_vpn import load_from_ldap
+        db_internas = _InternalSession()
+        try:
+            internas = load_from_ldap(db_internas)
+        except Exception as exc:
+            db_internas.rollback()
+            detalle = getattr(exc, "detail", None) or str(exc)
+            print(f"[SOX C7 INTERNAS] No se cargaron las VPN internas al iniciar la campaña: {detalle}", flush=True)
+            internas = {"error": detalle}
+        finally:
+            db_internas.close()
+
         # 6. Preparar avisos a gerentes (sin enviar).
         # El envío real se revisa y confirma en Campañas > Notificación a gerentes,
         # con los gerentes de ESTA campaña, sus contactos y control de duplicados.
@@ -464,6 +479,7 @@ def start_campaign():
             "semestre": nuevo_semestre,
             "resultado": resultado,
             "contactos": contactos,
+            "internas": internas,
             "correo": correo
 
         }

@@ -13,6 +13,7 @@ from routes.sox.control_7.dashboard import router as dashboard_router
 from routes.sox.control_7.history import router as history_router
 from routes.sox.control_7.logs import router as logs_router
 from routes.sox.control_7.notifications import router as campaign_notifications_router
+from routes.sox.control_7.internal_vpn import router as internal_vpn_router
 from routes.sox.control_5.events import router as controls_events5_router
 from routes.sox.control_6.reconcile import router as controls_reconcile_router
 from routes.sox.control_6.conciliations import router as controls_c6_conciliations_router
@@ -37,6 +38,7 @@ router.include_router(dashboard_router)
 router.include_router(history_router)
 router.include_router(logs_router)
 router.include_router(campaign_notifications_router)
+router.include_router(internal_vpn_router)
 router.include_router(controls_events5_router)
 router.include_router(controls_reconcile_router)
 router.include_router(controls_c6_conciliations_router)

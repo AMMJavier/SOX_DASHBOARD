@@ -1,4 +1,5 @@
-import { Home, LayoutGrid, Shield } from "lucide-react";
+import { Home, LayoutGrid, Network, Shield } from "lucide-react";
+import VpnScopeSwitch, { INTERNAL_PATH } from "../control_7/VpnScopeSwitch";
 import { useLocation } from "react-router-dom";
 import controlConfig from "../../../constants/controlConfig";
 import { readStoredUser } from "../../../services/authSession";
@@ -13,6 +14,8 @@ export default function Sidebar() {
   const id = pathname.match(/\/SOX\/Controls\/Control_(\d+)(?:\/|$)/i)?.[1];
   const dashboard = controlConfig[id]?.path || "/SOX/Controls/Control_7/dashboard";
   const documental = ["1", "2", "3", "5", "6"].includes(id);
+  // Control 7: "Internas" muestra solo la sección de VPN internas; "Externas", lo de siempre.
+  const internal = id === "7" && pathname.toLowerCase().startsWith(INTERNAL_PATH.toLowerCase());
   return (
     <aside className="fixed left-0 top-0 hidden h-screen w-64 overflow-y-auto bg-gradient-to-b from-slate-950 to-slate-900 p-5 text-white lg:block">
       <div className="mb-9 flex items-center gap-3">
@@ -21,10 +24,15 @@ export default function Sidebar() {
       </div>
       <nav className="space-y-1.5" aria-label="Navegación del módulo SOX">
         {role !== "gerencial" && <SidebarItem to="/modules" icon={LayoutGrid} label="Portal de módulos" active={pathname === "/modules"}/>}
-        {!documental && <SidebarItem to={dashboard} icon={Home} label="Dashboard"
-          active={pathname.toLowerCase() === dashboard.toLowerCase()}/>}
-        <ControlSectionsNav controlId={id} pathname={pathname} search={search}/>
-        {id === "7" && <Control7Sidebar role={role} pathname={pathname}/>}
+        {id === "7" && <VpnScopeSwitch internal={internal}/>}
+        {internal
+          ? <SidebarItem to={INTERNAL_PATH} icon={Network} label="VPN internas" active/>
+          : <>
+            {!documental && <SidebarItem to={dashboard} icon={Home} label="Dashboard"
+              active={pathname.toLowerCase() === dashboard.toLowerCase()}/>}
+            <ControlSectionsNav controlId={id} pathname={pathname} search={search}/>
+            {id === "7" && <Control7Sidebar role={role} pathname={pathname}/>}
+          </>}
       </nav>
     </aside>
   );
