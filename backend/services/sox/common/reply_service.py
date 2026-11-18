@@ -220,6 +220,9 @@ def check_replies(db, controls=None):
                 if code != 0 or not out.get("ok"):
                     mail.logger.error("Búsqueda de respuestas falló: %s", out.get("error"))
                     raise HTTPException(502, "No se pudo consultar la bandeja de entrada en Microsoft Graph")
+                mail.console(f"RESPUESTAS buzón {emisor}: códigos={[i['codigo'] for i in items]} "
+                             f"desde={since:%Y-%m-%d %H:%M:%S} UTC | encontradas={len(out.get('respuestas') or [])} "
+                             f"| diagnóstico={out.get('diagnostico')}")
                 # Las más antiguas primero: el orden de llegada define el estado final.
                 for reply in sorted(out.get("respuestas") or [], key=lambda r: str(r.get("recibido") or "")):
                     outbox = codes.get(str(reply.get("codigo") or "").casefold())

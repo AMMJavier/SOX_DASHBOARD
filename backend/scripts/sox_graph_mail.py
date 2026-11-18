@@ -220,17 +220,34 @@ def cmd_respuestas(buzon, cred, consulta):
     con = mailbox.con
     base = _base(emisor)
 
-    url = f"{base}/mailFolders/inbox/messages"
-    params = {"$select": "id,internetMessageId,subject,from,receivedDateTime,uniqueBody",
+    # Todas las carpetas del buzón (no solo la Bandeja de entrada): un buzón de automatización
+    # puede tener reglas o procesos que mueven los correos recibidos a otras carpetas.
+    url = f"{base}/messages"
+    params = {"$select": "id,internetMessageId,subject,from,receivedDateTime,uniqueBody,isDraft",
               "$orderby": "receivedDateTime desc", "$top": "50"}
     if consulta.get("desde_utc"):
         params["$filter"] = f"receivedDateTime ge {consulta['desde_utc']}"
     encontrados = []
+    diag = {"revisados": 0, "con_codigo": 0, "propios": 0, "otro_codigo": 0, "ya_registrados": 0, "asuntos": []}
     for _page in range(6):  # Hasta 300 mensajes recientes por revisión.
         data = con.get(url, params=params).json()
         for item in data.get("value", []):
+            diag["revisados"] += 1
             match = CODE_RE.search(item.get("subject") or "")
-            if not match or match.group(1).casefold() not in codigos or item["id"] in excluir:
+            if not match:
+                continue
+            diag["con_codigo"] += 1
+            if len(diag["asuntos"]) < 10:
+                diag["asuntos"].append(str(item.get("subject"))[:120])
+            sender = ((item.get("from") or {}).get("emailAddress") or {}).get("address") or ""
+            if item.get("isDraft") or sender.casefold() == emisor.casefold():
+                diag["propios"] += 1  # El correo enviado por el propio buzón (Elementos enviados) no es respuesta.
+                continue
+            if match.group(1).casefold() not in codigos:
+                diag["otro_codigo"] += 1
+                continue
+            if item["id"] in excluir:
+                diag["ya_registrados"] += 1
                 continue
             if len(encontrados) >= maximo:
                 break
@@ -254,7 +271,7 @@ def cmd_respuestas(buzon, cred, consulta):
         if not next_link or len(encontrados) >= maximo:
             break
         url, params = next_link, None
-    return {"ok": True, "respuestas": encontrados}
+    return {"ok": True, "respuestas": encontrados, "diagnostico": diag}
 
 
 def cmd_diagnostico(buzon, cred, emisor, probar_borrador):
