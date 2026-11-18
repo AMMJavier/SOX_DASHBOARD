@@ -74,6 +74,28 @@ async def send_mail(
         raise
 
 
+@router.post("/{control}/correos/respuestas/buscar")
+async def search_replies(control: int, db: Session = Depends(get_oracle_db),
+                         current: Usuario = Depends(get_current_user)):
+    """Busca ahora en el buzón las respuestas a los correos con código del control."""
+    _check_writer(current)
+    from services.sox.common import mail_codes, reply_service
+    if control not in mail_codes.reply_controls():
+        raise HTTPException(404, "La lectura de respuestas no está activa para este control (formatos.json)")
+    return await run_in_threadpool(reply_service.check_replies, db, {control})
+
+
+@router.post("/{control}/correos/{outbox_id}/aprobar")
+def approve_reply(control: int, outbox_id: int, db: Session = Depends(get_oracle_db),
+                  current: Usuario = Depends(get_current_user)):
+    """Aprobación manual de un correo respondido sin "OK" (solo administrador)."""
+    _check_writer(current)
+    if current.rol != "administrador":
+        raise HTTPException(403, "La aprobación manual requiere administrador")
+    from services.sox.common import reply_service
+    return reply_service.approve_manual(db, control=control, outbox_id=outbox_id, user=current)
+
+
 @router.post("/{control}/correos/{outbox_id}/archivar")
 async def archive_mail(control: int, outbox_id: int,
                        db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):

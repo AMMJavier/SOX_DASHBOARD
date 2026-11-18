@@ -9,7 +9,7 @@ import subprocess
 
 from fastapi import HTTPException
 
-from services.sox.common import mail_config
+from services.sox.common import mail_codes, mail_config
 from services.sox.common import mail_service as mail
 
 MAX_RECIPIENTS = 15
@@ -117,7 +117,15 @@ def compose(control, anio, semestre=None, referencia="", *, db=None, kind="notif
         raise HTTPException(503, f"Máximo {MAX_RECIPIENTS} destinatarios por notificación")
     recipients = mail.parse_addresses(";".join(recipients), f"destinatarios del Control {control}", True)
     taken = {x.casefold() for x in recipients}
-    copies = [x for x in mail.fixed_cc(control) if x.casefold() not in taken]
+    # Copias: generales y del control + las propias de la notificación (correos.json > notificacion.copias).
+    own_copies = config["copias"]
+    if own_copies:
+        mail.parse_addresses(";".join(own_copies), f"copias de la notificación del Control {control}", False)
+    copies = []
+    for address in mail.fixed_cc(control) + own_copies:
+        if address.casefold() not in taken:
+            taken.add(address.casefold())
+            copies.append(address)
 
     referencia = referencia.strip()
     values = {
@@ -149,9 +157,17 @@ def compose(control, anio, semestre=None, referencia="", *, db=None, kind="notif
             name, content, ref = found
             attachments.append((name, content))
             refs.append(ref)
+    # Código del correo (formatos.json): en la vista previa se muestra el que se asignará.
+    code = (None, None, None)
+    if db is not None and kind == "notificacion":
+        code = mail_codes.next_code(db, control, anio, semestre)
+    base_subject = subject
+    if code[0]:
+        subject = mail_codes.subject_with_code(subject, code[0], mail.MAX_SUBJECT)
     return {"emisor": emisor, "destinatarios": recipients, "cc": copies,
             "asunto": subject, "cuerpo": body.strip(), "formato": "texto",
-            "adjuntos": refs, "_archivos": attachments}
+            "adjuntos": refs, "codigo": code[0], "_codigo": code, "_asunto_base": base_subject,
+            "_archivos": attachments}
 
 
 def public(message):
@@ -160,16 +176,20 @@ def public(message):
 
 
 def deliver(db, *, control, anio, semestre, referencia, user_id, username, kind="notificacion",
-            idempotency_key=None, extra=None):
+            idempotency_key=None, extra=None, adjuntos=None, evidencias_ids=None):
     """Registra en SOX_MAIL_OUTBOX (ORIGEN='RECORDATORIO') y envía por Graph.
 
     La usan el botón "Enviar notificación" y el envío automático. Con idempotency_key
     fija (envío automático) un mismo recordatorio nunca se envía dos veces.
-    Devuelve {"estado", "auditoria_id", "repetido"}.
+    adjuntos: [(nombre, bytes)] subidos desde el equipo; evidencias_ids: documentos del repositorio.
+    En los controles con código (formatos.json) la notificación lleva código en el asunto
+    y su copia se archiva como evidencia para asociarle las respuestas.
+    Devuelve {"estado", "auditoria_id", "repetido", "codigo"}.
     """
     import os
     import shutil
     import tempfile
+    from types import SimpleNamespace
     from uuid import uuid4
     from sqlalchemy import Integer, outparam, text
     from sqlalchemy.exc import IntegrityError
@@ -178,19 +198,29 @@ def deliver(db, *, control, anio, semestre, referencia, user_id, username, kind=
     if not mail._env_bool("SOX_MAIL_ENABLED"):
         raise HTTPException(503, "Envíos deshabilitados: configurar SOX_MAIL_ENABLED=true tras autorización")
     mail._graph_paths()  # Falla aquí, antes de registrar, si la integración no está instalada.
-    files = mail._validate_attachments(message["_archivos"])
+    repo_files, repo_refs = mail.load_repository_attachments(db, control, anio, evidencias_ids or [])
+    files = mail._validate_attachments(message["_archivos"] + list(adjuntos or []) + repo_files)
 
     correlation = uuid4().hex
     semestre = semestre if control in SEMESTER_CONTROLS else None
     idem = idempotency_key or f"N{control}-{correlation}"
-    labels = "; ".join(f"{r['nombre']} [C{r['control']} #{r['id']}]" for r in message["adjuntos"]) or None
+    labels = [f"{r['nombre']} [C{r['control']} #{r['id']}]" for r in message["adjuntos"]]
+    labels += [name for name, _ in (adjuntos or [])]
+    labels += [f"{r['nombre']} [repositorio C{r['control']} #{r['id']}]" for r in repo_refs]
+    labels = "; ".join(labels) or None
+    # Código definitivo (puede diferir del de la vista previa si otro correo salió antes).
+    codigo, serie, reenvio = mail_codes.next_code(db, control, anio, semestre) if kind == "notificacion" else (None, None, None)
+    subject = mail_codes.subject_with_code(message["_asunto_base"], codigo, mail.MAX_SUBJECT) if codigo else message["asunto"]
+    message = {**message, "asunto": subject, "codigo": codigo}
     try:
         result = db.execute(text("""
             INSERT INTO AUTOM.SOX_MAIL_OUTBOX
               (CONTROL_NUMERO, ANIO, SEMESTRE, TIPO_EVIDENCIA, ORIGEN, IDEMPOTENCY_KEY, CORRELACION,
-               EMISOR, DESTINATARIOS, CC, ASUNTO, CUERPO, ADJUNTOS, ESTADO, SOLICITADO_POR, FECHA_SOLICITUD)
+               EMISOR, DESTINATARIOS, CC, ASUNTO, CUERPO, ADJUNTOS, ESTADO, SOLICITADO_POR, FECHA_SOLICITUD,
+               CODIGO, CODIGO_SERIE, CODIGO_REENVIO, ESTADO_RESPUESTA)
             VALUES (:p_control, :p_anio, :p_sem, :p_tipo, 'RECORDATORIO', :p_idem, :p_corr,
-                    :p_emisor, :p_para, :p_cc, :p_asunto, :p_cuerpo, :p_adj, 'PENDIENTE', :p_user, :p_fecha)
+                    :p_emisor, :p_para, :p_cc, :p_asunto, :p_cuerpo, :p_adj, 'PENDIENTE', :p_user, :p_fecha,
+                    :p_codigo, :p_serie, :p_reenvio, :p_estado_resp)
             RETURNING ID INTO :p_returned
         """).bindparams(outparam("p_returned", Integer)), {
             "p_control": control, "p_anio": anio, "p_sem": semestre, "p_tipo": kind[:40],
@@ -198,22 +228,33 @@ def deliver(db, *, control, anio, semestre, referencia, user_id, username, kind=
             "p_emisor": message["emisor"], "p_para": "; ".join(message["destinatarios"]),
             "p_cc": "; ".join(message["cc"]) or None, "p_asunto": message["asunto"],
             "p_cuerpo": message["cuerpo"], "p_adj": labels and labels[:2000],
-            "p_user": user_id, "p_fecha": mail._now()})
+            "p_user": user_id, "p_fecha": mail._now(), "p_codigo": codigo, "p_serie": serie,
+            "p_reenvio": reenvio, "p_estado_resp": "PENDIENTE" if codigo else None})
         value = result.out_parameters["p_returned"]
         outbox_id = int(value[0] if isinstance(value, (tuple, list)) else value)
+        for ref in repo_refs:  # Trazabilidad en la evidencia original.
+            db.execute(text("""
+                INSERT INTO AUTOM.SOX_CONTROL_EVIDENCIA_AUD (EVIDENCIA_ID, ACCION, USUARIO_ID, FECHA, DETALLE)
+                VALUES (:p_evid, 'DESCARGA', :p_user, :p_fecha, :p_det)
+            """), {"p_evid": ref["id"], "p_user": user_id, "p_fecha": mail._now(),
+                   "p_det": f"Adjuntada a la notificación SOX #{outbox_id} (Control {control})"})
         db.commit()
     except IntegrityError:
         db.rollback()
-        mail.console(f"{kind.upper()} Control {control} ya registrado con clave {idem}: no se envía de nuevo")
-        return {"estado": "YA_ENVIADO", "auditoria_id": None, "repetido": True}
+        if idempotency_key and mail._get(db, idem=idem[:64]):
+            mail.console(f"{kind.upper()} Control {control} ya registrado con clave {idem}: no se envía de nuevo")
+            return {"estado": "YA_ENVIADO", "auditoria_id": None, "repetido": True, "codigo": None}
+        raise HTTPException(409, "Otro correo del control se registró al mismo tiempo; vuelve a intentar.")
     except Exception:
         db.rollback()
         mail.logger.exception("No se pudo registrar la notificación SOX")
         raise HTTPException(503, "Auditoría de correos no disponible; envío cancelado")
 
-    mail.console(f"{kind.upper()} Control {control} registrada en SOX_MAIL_OUTBOX #{outbox_id} | "
-                 f"para={message['destinatarios']} cc={message['cc']} adjuntos={[r['nombre'] for r in message['adjuntos']]}")
-    footer = f"\n\n--\nEnviado desde SOX Dashboard por {username}. Referencia SOX: N{control}-{outbox_id}."
+    mail.console(f"{kind.upper()} Control {control} registrada en SOX_MAIL_OUTBOX #{outbox_id}"
+                 f"{f' código {codigo}' if codigo else ''} | para={message['destinatarios']} cc={message['cc']} "
+                 f"adjuntos={labels}")
+    footer = (f"\n\n--\nEnviado desde SOX Dashboard por {username}. Referencia SOX: N{control}-{outbox_id}."
+              + (mail_codes.code_footer(codigo) if codigo else ""))
     attach_dir = tempfile.mkdtemp(prefix="sox_rec_")
     os.chmod(attach_dir, 0o700)
     try:
@@ -238,9 +279,19 @@ def deliver(db, *, control, anio, semestre, referencia, user_id, username, kind=
     if not ok:
         mail._set_state(db, outbox_id, "FALLIDO", detail)
         raise HTTPException(502, "Microsoft Graph no aceptó el envío. Revisar registros del servidor.")
-    # Notificación operativa: ACEPTADO es su estado final (no se archiva como evidencia).
     mail._set_state(db, outbox_id, "ACEPTADO", None, FECHA_ENVIO=mail._now(), INTERNET_MESSAGE_ID=message_id)
-    return {"estado": "ACEPTADO", "auditoria_id": outbox_id, "repetido": False}
+    if not codigo:
+        # Notificación operativa sin código: ACEPTADO es su estado final (no se archiva).
+        return {"estado": "ACEPTADO", "auditoria_id": outbox_id, "repetido": False, "codigo": None}
+    # Con código: se archiva la copia enviada como evidencia (formato de formatos.json).
+    estado = "ACEPTADO"
+    try:
+        archived = mail.archive_mail(db, control=control, outbox_id=outbox_id,
+                                     user=SimpleNamespace(id=user_id, username=username))
+        estado = (archived or {}).get("estado") or estado
+    except HTTPException as exc:
+        mail.console(f"{kind.upper()} Control {control} #{outbox_id} enviada; archivado pendiente: {exc.detail}")
+    return {"estado": estado, "auditoria_id": outbox_id, "repetido": False, "codigo": codigo}
 
 
 def send_via_graph(message, correlation, attachments=None):

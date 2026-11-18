@@ -7,11 +7,12 @@ AUTOM.SOX_MAIL_OUTBOX con ORIGEN='RECORDATORIO' antes de llamar a Microsoft Grap
 """
 import logging
 import time
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from auth.dependencies import get_current_user
 from database.oracle_database import get_oracle_db
@@ -46,24 +47,45 @@ def preview(control: int, payload: RequestReminder, current: Usuario = Depends(g
 
 
 @router.post("/{control}/recordatorios/enviar")
-def send(control: int, payload: RequestReminder,
-         current: Usuario = Depends(get_current_user),
-         db: Session = Depends(get_oracle_db)):
+async def send(control: int,
+               anio: int = Form(..., ge=2020, le=2100),
+               semestre: Optional[int] = Form(None, ge=1, le=2),
+               referencia: str = Form("", max_length=150),
+               confirmar: bool = Form(False),
+               evidencias_ids: str = Form(""),
+               adjuntos: Optional[List[UploadFile]] = File(None),
+               current: Usuario = Depends(get_current_user),
+               db: Session = Depends(get_oracle_db)):
+    """Envía la notificación del control; admite adjuntos del equipo y del repositorio."""
     start = time.monotonic()
-    mail.console(f"NOTIFICACION Control {control} INICIO | usuario={current.username} anio={payload.anio} "
-                 f"semestre={payload.semestre}")
+    mail.console(f"NOTIFICACION Control {control} INICIO | usuario={current.username} anio={anio} "
+                 f"semestre={semestre}")
     try:
         _check_admin(current)
-        if payload.confirmar is not True:
+        if confirmar is not True:
             raise HTTPException(422, "Requiere confirmación explícita")
-        result = deliver(db, control=control, anio=payload.anio, semestre=payload.semestre,
-                         referencia=payload.referencia, user_id=current.id, username=current.username)
+        repository_ids = mail.parse_evidence_ids(evidencias_ids)
+        files = []
+        limit = mail.max_attachment_bytes()
+        for upload in adjuntos or []:
+            if not upload.filename:
+                continue
+            content = await upload.read(limit + 1)
+            await upload.close()
+            if len(content) > limit:
+                raise HTTPException(413, "Los adjuntos superan el tamaño permitido")
+            files.append((upload.filename, content))
+        # Graph es bloqueante: el envío y el archivado se ejecutan fuera del event loop.
+        result = await run_in_threadpool(
+            deliver, db, control=control, anio=anio, semestre=semestre, referencia=referencia,
+            user_id=current.id, username=current.username, adjuntos=files, evidencias_ids=repository_ids)
     except HTTPException as exc:
         mail.console(f"NOTIFICACION Control {control} NO ENVIADA tras {mail.elapsed(start)} | "
                      f"HTTP {exc.status_code}: {exc.detail}")
         raise
-    mail.console(f"NOTIFICACION Control {control} ENVIADA (N{control}-{result['auditoria_id']}) en {mail.elapsed(start)}")
-    return {**result, "aceptado_graph": result["estado"] == "ACEPTADO"}
+    mail.console(f"NOTIFICACION Control {control} ENVIADA (N{control}-{result['auditoria_id']}"
+                 f"{', código ' + result['codigo'] if result.get('codigo') else ''}) en {mail.elapsed(start)}")
+    return {**result, "aceptado_graph": result["estado"] in ("ACEPTADO", "ARCHIVADO")}
 
 
 @router.get("/{control}/calendario")

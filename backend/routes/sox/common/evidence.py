@@ -99,9 +99,55 @@ def listar_evidencias(
          ORDER BY e.CREADO_EN DESC, e.ID DESC
     """)
     items = [_serialize(row) for row in db.execute(sql, {"control": control, "anio": anio, "semestre": semestre}).mappings()]
+    _attach_mail_codes(db, control, items)
     return {"items": items, "total": len(items),
             "metrics": {"total": len(items), "confirmed": sum(x["estado"] == "VERIFICADA" for x in items),
                         "pending": sum(x["estado"] == "CARGADA" for x in items), "expired": None}}
+
+
+def _attach_mail_codes(db, control, items):
+    """Controles con código de correo (formatos.json): agrega a cada evidencia su correo
+    (código y estado de respuesta) y la lista de respuestas archivadas; marca las evidencias
+    que SON respuestas (respuesta_de) para mostrarlas dentro de su correo y no como fila aparte."""
+    from services.sox.common import mail_codes
+    if not items or not mail_codes.settings(control):
+        return
+    by_id = {x["id"]: x for x in items}
+    mails = db.execute(text("""
+        SELECT o.ID AS "correo_id", o.CODIGO AS "codigo", o.ESTADO_RESPUESTA AS "estado_respuesta",
+               o.FECHA_RESPUESTA AS "fecha_respuesta", o.ORIGEN AS "origen_correo",
+               o.EVIDENCIA_PDF_ID AS "pdf_id", o.EVIDENCIA_EML_ID AS "eml_id"
+          FROM AUTOM.SOX_MAIL_OUTBOX o
+         WHERE o.CONTROL_NUMERO = :control AND o.CODIGO IS NOT NULL
+           AND (o.EVIDENCIA_PDF_ID IS NOT NULL OR o.EVIDENCIA_EML_ID IS NOT NULL)
+    """), {"control": control}).mappings()
+    linked = {}
+    for row in mails:
+        for evidence_id in (row["pdf_id"], row["eml_id"]):
+            if evidence_id in by_id:
+                info = _serialize({k: row[k] for k in ("correo_id", "codigo", "estado_respuesta",
+                                                        "fecha_respuesta", "origen_correo")})
+                by_id[evidence_id].update(info, respuestas=[])
+                linked.setdefault(row["correo_id"], []).append(by_id[evidence_id])
+    if not linked:
+        return
+    params = {f"o{i}": oid for i, oid in enumerate(linked)}
+    replies = db.execute(text(f"""
+        SELECT r.ID AS "id", r.OUTBOX_ID AS "correo_id", r.REMITENTE AS "remitente", r.ASUNTO AS "asunto",
+               r.FECHA_RECIBIDO AS "fecha_recibido", r.EXTRACTO AS "extracto", r.APRUEBA AS "aprueba",
+               r.EVIDENCIA_ID AS "evidencia_id", e.NOMBRE_ARCHIVO AS "nombre_archivo"
+          FROM AUTOM.SOX_MAIL_RESPUESTAS r
+          LEFT JOIN AUTOM.SOX_CONTROL_EVIDENCIAS e ON e.ID = r.EVIDENCIA_ID
+         WHERE r.OUTBOX_ID IN ({', '.join(':' + k for k in params)})
+         ORDER BY r.FECHA_RECIBIDO
+    """), params).mappings()
+    for row in replies:
+        reply = _serialize(row)
+        reply["aprueba"] = bool(reply["aprueba"])
+        for item in linked.get(row["correo_id"], []):
+            item["respuestas"].append(reply)
+        if row["evidencia_id"] in by_id:
+            by_id[row["evidencia_id"]]["respuesta_de"] = row["correo_id"]
 
 
 @router.post("/{control}/evidencias", status_code=201)

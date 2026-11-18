@@ -13,7 +13,9 @@ const STATUS = {
   FALLIDO: { label: "Fallido", className: "text-red-700", help: "Graph rechazó el envío; no salió ningún correo." },
 };
 
-const emptyDraft = (defaultType, asunto = "", cuerpo = "") => ({ para: "", cc: "", asunto, cuerpo, tipo: defaultType });
+const REPLY_LABEL = { PENDIENTE: "Pendiente de respuesta", RESPONDIDO: "Respondido · revisar", APROBADO: "Aprobado" };
+
+const emptyDraft =(defaultType, asunto = "", cuerpo = "") => ({ para: "", cc: "", asunto, cuerpo, tipo: defaultType });
 
 // Plantillas de backend/config/correos.json: reemplaza {variable}; las desconocidas quedan igual.
 const renderTemplate = (text, vars) => String(text || "").replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key] ?? "") : match));
@@ -114,7 +116,9 @@ export default function ControlMailPanel({
       if (result.repetido) {
         setFeedback({ caution: true, text: `Esta solicitud ya había sido procesada (correo #${result.id}, ${STATUS[result.estado]?.label || result.estado}). No se envió de nuevo.` });
       } else if (result.estado === "ARCHIVADO") {
-        setFeedback({ caution: false, text: `Correo #${result.id} enviado y archivado como evidencia (EML + PDF). Queda pendiente de verificación interna.` });
+        setFeedback({ caution: false, text: result.codigo
+          ? `Correo ${result.codigo} enviado y archivado como evidencia. Queda Pendiente hasta que respondan con "OK".`
+          : `Correo #${result.id} enviado y archivado como evidencia. Queda pendiente de verificación interna.` });
       } else {
         setFeedback({ caution: true, text: `Correo #${result.id} enviado. ${result.detalle || "La copia aún no se archivó; usa \"Reintentar archivado\"."}` });
       }
@@ -175,6 +179,7 @@ export default function ControlMailPanel({
           placeholder="Describe la revisión o los cambios realizados y la solicitud a Gerencia."/>
       </label>
       <p className="mt-1 text-xs text-slate-500">Al final del mensaje se agrega automáticamente quién lo envió desde SOX y su referencia.
+        {config?.usa_codigo ? ` El asunto llevará el código del correo (p. ej. [SOX 001-1]) para asociar la respuesta "OK"; se archiva en formato ${String(config.formato_archivo).toUpperCase()}.` : ""}
         {config?.dominios_permitidos?.length ? ` Dominios permitidos: ${config.dominios_permitidos.join(", ")}.` : ""}
         {config?.copias_fijas?.length ? ` Copia automática (correos.json): ${config.copias_fijas.join(", ")}.` : ""}</p>
       {repositoryFiles.length > 0 && <fieldset className="mt-4">
@@ -216,6 +221,7 @@ export default function ControlMailPanel({
                 <p className="text-xs text-slate-500">Para: {item.destinatarios}{item.cc ? ` · CC: ${item.cc}` : ""}</p>
                 {item.adjuntos && <p className="text-xs text-slate-500">Adjuntos: {item.adjuntos}</p>}</td>
               <td className="px-3 py-3"><span className={`font-semibold ${status.className}`}>{status.label}</span>
+                {item.codigo && <p className="mt-1 text-xs font-semibold text-blue-700">Código {item.codigo} · {REPLY_LABEL[item.estado_respuesta] || "Pendiente"}</p>}
                 {(item.detalle || status.help) && <p className="mt-1 max-w-xs text-xs text-slate-500">{item.detalle || status.help}</p>}</td>
               <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
                 {item.evidencia_eml_id && <button type="button" className={SECONDARY} onClick={() => download(item.evidencia_eml_id, item.eml_nombre)}>EML</button>}

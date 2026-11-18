@@ -31,9 +31,11 @@ Application Access Policy):
 """
 import argparse
 import base64
+import html
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from urllib.parse import quote
@@ -193,6 +195,68 @@ def cmd_archivar(buzon, cred, consulta):
             "sent_datetime": item.get("sentDateTime"), "bytes": len(mime)}, 0
 
 
+CODE_RE = re.compile(r"\[SOX\s+(\d{3}-\d+(?:\.\d+)?)\]", re.IGNORECASE)
+
+
+def _html_text(markup):
+    markup = re.sub(r"(?is)<(script|style).*?</\1>", "", markup or "")
+    markup = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>", "\n", markup)
+    return html.unescape(re.sub(r"<[^>]+>", "", markup)).strip()
+
+
+def cmd_respuestas(buzon, cred, consulta):
+    """Busca en la Bandeja de entrada respuestas cuyo asunto lleve "[SOX <código>]".
+
+    Solo descarga (MIME .eml) las de códigos pedidos que no estén en "excluir" (ya registradas).
+    uniqueBody = solo el texto nuevo de la respuesta, sin el correo citado: ahí se busca el "OK".
+    """
+    emisor = consulta["emisor"].strip()
+    buzon.validar_correos([emisor], "emisor")
+    codigos = {str(c).casefold() for c in consulta.get("codigos") or []}
+    excluir = set(consulta.get("excluir") or [])
+    salida = consulta["salida_dir"]
+    maximo = max(1, min(int(consulta.get("max", 30)), 100))
+    mailbox = buzon.abrir_buzon(cred, emisor)
+    con = mailbox.con
+    base = _base(emisor)
+
+    url = f"{base}/mailFolders/inbox/messages"
+    params = {"$select": "id,internetMessageId,subject,from,receivedDateTime,uniqueBody",
+              "$orderby": "receivedDateTime desc", "$top": "50"}
+    if consulta.get("desde_utc"):
+        params["$filter"] = f"receivedDateTime ge {consulta['desde_utc']}"
+    encontrados = []
+    for _page in range(6):  # Hasta 300 mensajes recientes por revisión.
+        data = con.get(url, params=params).json()
+        for item in data.get("value", []):
+            match = CODE_RE.search(item.get("subject") or "")
+            if not match or match.group(1).casefold() not in codigos or item["id"] in excluir:
+                continue
+            if len(encontrados) >= maximo:
+                break
+            ruta = os.path.join(salida, f"{len(encontrados)}.eml")
+            mime = con.get(f"{base}/messages/{_id(item['id'])}/$value").content
+            fd = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(mime)
+            body = item.get("uniqueBody") or {}
+            texto = body.get("content") or ""
+            if str(body.get("contentType", "")).lower() == "html":
+                texto = _html_text(texto)
+            encontrados.append({
+                "codigo": match.group(1), "graph_message_id": item["id"],
+                "internet_message_id": item.get("internetMessageId"),
+                "remitente": ((item.get("from") or {}).get("emailAddress") or {}).get("address"),
+                "asunto": item.get("subject"), "recibido": item.get("receivedDateTime"),
+                "texto": texto[:2000], "archivo": ruta,
+            })
+        next_link = data.get("@odata.nextLink")
+        if not next_link or len(encontrados) >= maximo:
+            break
+        url, params = next_link, None
+    return {"ok": True, "respuestas": encontrados}
+
+
 def cmd_diagnostico(buzon, cred, emisor, probar_borrador):
     """Comprueba permisos efectivos SIN enviar ningún correo."""
     buzon.validar_correos([emisor], "emisor")
@@ -227,6 +291,8 @@ def main():
     p_env.add_argument("-m", "--mensaje", required=True)
     p_arc = sub.add_parser("archivar")
     p_arc.add_argument("-m", "--mensaje", required=True)
+    p_resp = sub.add_parser("respuestas")
+    p_resp.add_argument("-m", "--mensaje", required=True)
     p_diag = sub.add_parser("diagnostico")
     p_diag.add_argument("--emisor", required=True)
     p_diag.add_argument("--probar-borrador", action="store_true")
@@ -247,6 +313,8 @@ def main():
         if args.comando == "archivar":
             data, code = cmd_archivar(buzon, cred, buzon.cargar_json(args.mensaje, "consulta"))
             return _out(data, code)
+        if args.comando == "respuestas":
+            return _out(cmd_respuestas(buzon, cred, buzon.cargar_json(args.mensaje, "consulta")))
         return _out(cmd_diagnostico(buzon, cred, args.emisor, args.probar_borrador))
     except Exception as exc:  # El backend registra el detalle; al usuario solo llega un mensaje genérico.
         sys.stderr.write(f"SOX Graph error: {type(exc).__name__}: {exc}\n")

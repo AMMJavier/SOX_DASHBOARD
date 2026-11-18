@@ -36,7 +36,7 @@ from sqlalchemy import Integer, outparam, text
 from sqlalchemy.exc import IntegrityError
 
 from routes.sox.common.evidence import EVIDENCE_TYPES, MAX_BYTES, _check_control, _storage_root
-from services.sox.common import mail_config
+from services.sox.common import mail_codes, mail_config
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +154,8 @@ def config_status(control):
         "tipos_evidencia": sorted(mail_types(control)),
         "copias_fijas": mail_config.cc(control),
         "plantilla_borrador": mail_config.draft_template(control),
+        "formato_archivo": mail_codes.archive_format(control),
+        "usa_codigo": bool(mail_codes.settings(control)),
     }
 
 
@@ -318,7 +320,8 @@ _SELECT = """
            o.INTENTOS_ARCHIVO AS "intentos_archivo", o.FECHA_SOLICITUD AS "fecha_solicitud",
            o.FECHA_ENVIO AS "fecha_envio", o.FECHA_ARCHIVO AS "fecha_archivo",
            u.USERNAME AS "solicitado_por", o.SOLICITADO_POR AS "solicitado_por_id",
-           o.EVENTO_ID AS "evento_id"
+           o.EVENTO_ID AS "evento_id", o.CODIGO AS "codigo", o.ESTADO_RESPUESTA AS "estado_respuesta",
+           o.FECHA_RESPUESTA AS "fecha_respuesta"
       FROM AUTOM.SOX_MAIL_OUTBOX o
       JOIN AUTOM.USUARIOS u ON u.ID = o.SOLICITADO_POR
       LEFT JOIN AUTOM.SOX_CONTROL_EVIDENCIAS eml ON eml.ID = o.EVIDENCIA_EML_ID
@@ -410,22 +413,27 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
     labels += [f"{r['nombre']} [repositorio C{r['control']} #{r['id']}]" for r in repo_refs]
 
     correlacion = uuid4().hex
+    # Código de correo (formatos.json): va en el asunto para asociar las respuestas.
+    codigo, serie, reenvio = mail_codes.next_code(db, control, anio, semestre)
+    if codigo:
+        asunto = mail_codes.subject_with_code(asunto, codigo, MAX_SUBJECT)
     try:
         result = db.execute(text("""
             INSERT INTO AUTOM.SOX_MAIL_OUTBOX
               (CONTROL_NUMERO, ANIO, SEMESTRE, TIPO_EVIDENCIA, ORIGEN, IDEMPOTENCY_KEY, CORRELACION,
                EMISOR, DESTINATARIOS, CC, ASUNTO, CUERPO, ADJUNTOS, ESTADO, SOLICITADO_POR, FECHA_SOLICITUD,
-               EVENTO_ID)
+               EVENTO_ID, CODIGO, CODIGO_SERIE, CODIGO_REENVIO, ESTADO_RESPUESTA)
             VALUES (:p_control, :p_anio, :p_semestre, :p_tipo, 'MANUAL', :p_idem, :p_corr,
                     :p_emisor, :p_para, :p_cc, :p_asunto, :p_cuerpo, :p_adjuntos, 'PENDIENTE', :p_user, :p_fecha,
-                    :p_evento)
+                    :p_evento, :p_codigo, :p_serie, :p_reenvio, :p_estado_resp)
             RETURNING ID INTO :p_returned
         """).bindparams(outparam("p_returned", Integer)), {
             "p_control": control, "p_anio": anio, "p_semestre": semestre, "p_tipo": tipo, "p_evento": evento_id,
             "p_idem": idempotency_key, "p_corr": correlacion, "p_emisor": emisor,
             "p_para": "; ".join(to_list), "p_cc": "; ".join(cc_list) or None, "p_asunto": asunto,
             "p_cuerpo": cuerpo, "p_adjuntos": ("; ".join(labels))[:2000] or None,
-            "p_user": user.id, "p_fecha": _now()})
+            "p_user": user.id, "p_fecha": _now(), "p_codigo": codigo, "p_serie": serie, "p_reenvio": reenvio,
+            "p_estado_resp": "PENDIENTE" if codigo else None})
         value = result.out_parameters["p_returned"]
         outbox_id = int(value[0] if isinstance(value, (tuple, list)) else value)
         # Trazabilidad en la evidencia original: se consultó para adjuntarla a un correo.
@@ -441,6 +449,8 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
         previous = _get(db, idem=idempotency_key)
         if previous and previous["solicitado_por_id"] == user.id:
             return {**previous, "repetido": True}
+        if not previous:  # Otro envío simultáneo tomó el mismo código de correo.
+            raise HTTPException(409, "Otro correo del control se registró al mismo tiempo; vuelve a intentar.")
         raise HTTPException(409, "La solicitud ya existe")
     except Exception:
         db.rollback()
@@ -449,7 +459,8 @@ def send_mail(db, *, control, anio, semestre, tipo, para, cc, asunto, cuerpo, ad
 
     footer = (f"\n\n--\nEnviado desde SOX Dashboard por {user.username}. "
               f"Referencia SOX: C{control}-{outbox_id}"
-              + (f" · Evento #{event['id']} ({event['operacion']} {event['cuenta']})" if event else "") + ".")
+              + (f" · Evento #{event['id']} ({event['operacion']} {event['cuenta']})" if event else "") + "."
+              + (mail_codes.code_footer(codigo) if codigo else ""))
     attach_dir = tempfile.mkdtemp(prefix="sox_adj_")
     os.chmod(attach_dir, 0o700)
     try:
@@ -507,8 +518,13 @@ def _archive_mail_impl(db, *, control, outbox_id, user):
     """), {"p_id": int(outbox_id), "p_control": control}).mappings().first()
     if not row:
         raise HTTPException(404, "Correo inexistente")
-    if row["origen"] != "MANUAL":
+    codes = mail_codes.settings(control)
+    # Las notificaciones solo se archivan en los controles con código (formatos.json).
+    if row["origen"] != "MANUAL" and not (row["origen"] == "RECORDATORIO" and codes):
         raise HTTPException(409, "Las notificaciones automáticas no se archivan como evidencia documental")
+    tipo_evidencia = row["tipo_evidencia"]
+    if tipo_evidencia not in EVIDENCE_TYPES.get(control, ()):
+        tipo_evidencia = codes["tipo_evidencia_notificacion"] if codes else tipo_evidencia
     if row["estado"] == "ARCHIVADO":
         return _get(db, outbox_id=outbox_id)
     now = _now()
@@ -550,7 +566,8 @@ def _archive_mail_impl(db, *, control, outbox_id, user):
         if not eml or len(eml) > MAX_BYTES:
             _set_state(db, outbox_id, "ACEPTADO", "La copia del correo está vacía o supera 15 MB.")
             raise HTTPException(413, "La copia del correo está vacía o supera el límite de evidencia")
-        pdf = eml_to_pdf(eml, outbox_id=outbox_id, control=control)
+        fmt = mail_codes.archive_format(control)  # formatos.json: pdf | eml | ambos
+        pdf = eml_to_pdf(eml, outbox_id=outbox_id, control=control) if fmt in ("pdf", "ambos") else None
 
         stamp = now.strftime("%Y%m%d_%H%M%S")
         safe_subject = re.sub(r"[^A-Za-z0-9_-]+", "_", row["asunto"])[:60].strip("_") or "correo"
@@ -558,12 +575,12 @@ def _archive_mail_impl(db, *, control, outbox_id, user):
         referencia = f"Correo SOX #{outbox_id} · {row['asunto']}"[:250]
         observaciones = ("Copia archivada automáticamente desde Elementos enviados (Microsoft Graph). "
                          "Que Graph aceptara el envío no implica recepción ni aprobación de Gerencia.")
-        common = {"control": control, "anio": row["anio"], "semestre": row["semestre"], "tipo": row["tipo_evidencia"],
+        common = {"control": control, "anio": row["anio"], "semestre": row["semestre"], "tipo": tipo_evidencia,
                   "referencia": referencia, "observaciones": observaciones,
                   "autor": row["solicitado_por"], "actor": user.id, "outbox_id": outbox_id,
                   "evento_id": row["evento_id"]}  # Control 5: queda dentro del expediente del evento
-        eml_id = _store_evidence(db, stored, filename=f"{base_name}.eml", content=eml, **common)
-        pdf_id = _store_evidence(db, stored, filename=f"{base_name}.pdf", content=pdf, **common)
+        eml_id = _store_evidence(db, stored, filename=f"{base_name}.eml", content=eml, **common) if fmt in ("eml", "ambos") else None
+        pdf_id = _store_evidence(db, stored, filename=f"{base_name}.pdf", content=pdf, **common) if pdf else None
         db.execute(text("""
             UPDATE AUTOM.SOX_MAIL_OUTBOX
                SET ESTADO = 'ARCHIVADO', DETALLE = NULL, EVIDENCIA_EML_ID = :p_eml, EVIDENCIA_PDF_ID = :p_pdf,
@@ -644,7 +661,11 @@ def _html_to_text(markup):
     return re.sub(r"\n{3,}", "\n\n", html.unescape(markup)).strip()
 
 
-def eml_to_pdf(eml_bytes, *, outbox_id, control):
+NOTA_ENVIADO = ("Representación PDF generada por SOX Dashboard. El original íntegro (con adjuntos) es el archivo "
+                "EML asociado al mismo correo. El envío aceptado por Microsoft Graph no acredita recepción ni aprobación.")
+
+
+def eml_to_pdf(eml_bytes, *, outbox_id, control, titulo="Correo archivado como evidencia", nota=NOTA_ENVIADO):
     """Representación legible del correo; el original íntegro es el archivo EML."""
     try:
         from reportlab.lib import colors
@@ -676,7 +697,7 @@ def eml_to_pdf(eml_bytes, *, outbox_id, control):
     def header():
         state["page"] += 1
         pdf.setFont("Helvetica-Bold", 12)
-        pdf.drawString(margin, height - 35, _latin(f"HITSS | SOX Control {control} - Correo archivado como evidencia"))
+        pdf.drawString(margin, height - 35, _latin(f"HITSS | SOX Control {control} - {titulo}"))
         pdf.setStrokeColor(colors.HexColor("#D7DEE8"))
         pdf.line(margin, height - 45, width - margin, height - 45)
         pdf.setFont("Helvetica", 7)
@@ -705,9 +726,7 @@ def eml_to_pdf(eml_bytes, *, outbox_id, control):
     pdf.line(margin, state["y"] + 8, width - margin, state["y"] + 8)
     write(body or "(sin contenido de texto)", size=10, gap=4)
     state["y"] -= 8
-    write("Representación PDF generada por SOX Dashboard. El original íntegro (con adjuntos) es el archivo "
-          "EML asociado al mismo correo. El envío aceptado por Microsoft Graph no acredita recepción ni aprobación.",
-          size=7)
+    write(nota, size=7)
     pdf.save()
     content = buf.getvalue()
     if not content.startswith(b"%PDF-") or len(content) > MAX_BYTES:

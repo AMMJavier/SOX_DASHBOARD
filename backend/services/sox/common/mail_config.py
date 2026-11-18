@@ -114,10 +114,11 @@ def cc(number) -> list:
 
 
 def notification(number) -> dict:
-    """Notificación/recordatorio del control: destinatarios, asunto y cuerpo."""
+    """Notificación/recordatorio del control: destinatarios, copias propias, asunto y cuerpo."""
     data = control(number).get("notificacion") or {}
     recipients = _list(data.get("destinatarios")) or _list(os.getenv(f"SOX_REMINDER_TO_{number}", ""))
-    return {"destinatarios": _dedupe(recipients), "asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
+    return {"destinatarios": _dedupe(recipients), "copias": _dedupe(_list(data.get("copias"))),
+            "asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
 
 
 def notification_controls() -> set:

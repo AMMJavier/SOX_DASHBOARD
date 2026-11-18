@@ -50,5 +50,7 @@ def start_reminder_scheduler():
     No envía nada mientras "automatico.activo" sea false. Desactivable con SOX_SCHEDULER_DISABLED=true."""
     if os.getenv("SOX_SCHEDULER_DISABLED", "false").strip().lower() == "true":
         return
-    from services.sox.common import reminder_scheduler
+    from services.sox.common import reminder_scheduler, reply_service
     reminder_scheduler.start()
+    # Respuestas a correos con código (formatos.json): revisión del buzón cada N minutos.
+    reply_service.start()

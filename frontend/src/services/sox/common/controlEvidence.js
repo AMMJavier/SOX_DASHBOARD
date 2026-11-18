@@ -87,11 +87,26 @@ export function previewControlReminder(control, data) {
   }).then(parse);
 }
 
-export function sendControlReminder(control, data) {
-  return authenticatedFetch(`${BASE}/${control}/recordatorios/enviar`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  }).then(parse);
+/** Envía la notificación; adjuntos: archivos del equipo; evidenciasIds: documentos del repositorio. */
+export function sendControlReminder(control, { anio, semestre, referencia, confirmar, adjuntos = [], evidenciasIds = [] }) {
+  const form = new FormData();
+  form.append("anio", String(anio));
+  if (semestre != null) form.append("semestre", String(semestre));
+  form.append("referencia", referencia || "");
+  form.append("confirmar", confirmar ? "true" : "false");
+  form.append("evidencias_ids", evidenciasIds.join(","));
+  for (const file of adjuntos) form.append("adjuntos", file);
+  return authenticatedFetch(`${BASE}/${control}/recordatorios/enviar`, { method: "POST", body: form }).then(parse);
+}
+
+/** Busca ahora en el buzón las respuestas a los correos con código del control. */
+export function searchMailReplies(control) {
+  return authenticatedFetch(`${BASE}/${control}/correos/respuestas/buscar`, { method: "POST" }).then(parse);
+}
+
+/** Aprobación manual de un correo respondido sin "OK" (administrador). */
+export function approveMailReply(control, correoId) {
+  return authenticatedFetch(`${BASE}/${control}/correos/${correoId}/aprobar`, { method: "POST" }).then(parse);
 }
 
 export function getInternalLdapAccess() {

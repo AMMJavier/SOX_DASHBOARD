@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
-import { downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
-import { AlertTriangle, CalendarDays, CheckCheck, Clock, FolderOpen, History, Mail, Paperclip, RotateCcw, Upload, X } from "lucide-react";
+import { approveMailReply, downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, searchMailReplies, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
+import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
@@ -15,6 +15,12 @@ const MAIL_CONTROLS = [1, 2, 3];
 const NOTIFY_CONTROLS = [1, 2, 3];
 // Tipo de evidencia propuesto para el correo enviado (el usuario puede cambiarlo).
 const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
+// Estado de un correo con código (backend/config/formatos.json) según su respuesta.
+const REPLY_STATUS = {
+  PENDIENTE: { label: "Pendiente", className: "text-amber-700", help: "Esperando la respuesta \"OK\"." },
+  RESPONDIDO: { label: "Respondido · revisar", className: "text-blue-700", help: "Hay respuesta sin \"OK\" de un destinatario." },
+  APROBADO: { label: "Aprobado", className: "text-emerald-700" },
+};
 
 const VIEWS = [
   { id: "resumen", label: "Resumen", icon: CheckCheck },
@@ -56,6 +62,9 @@ export default function ControlWorkspace({ config }) {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [missingFiles, setMissingFiles] = useState(false);
+  const [expanded, setExpanded] = useState([]);
+  const [replyBusy, setReplyBusy] = useState(false);
+  const [replyFeedback, setReplyFeedback] = useState("");
   const [loadError, setLoadError] = useState("");
   const [refreshRecords, setRefreshRecords] = useState(0);
   const currentRole = readStoredUser()?.rol;
@@ -128,6 +137,29 @@ export default function ControlWorkspace({ config }) {
     } catch (error) { setFeedback(`Error de carga: ${error.message}. Los archivos aceptados antes del error pueden haberse guardado.`); setRefreshRecords((n) => n + 1); }
     finally { setSaving(false); }
   }
+
+  async function searchReplies() {
+    setReplyBusy(true); setReplyFeedback("");
+    try {
+      const r = await searchMailReplies(config.number);
+      setReplyFeedback(r.nuevas
+        ? `${r.nuevas} respuesta(s) nueva(s): ${r.aprobados} aprobada(s) con OK, ${r.por_revisar} por revisar.`
+        : `Sin respuestas nuevas (${r.revisados} correo(s) pendiente(s) revisado(s)).`);
+      setRefreshRecords((n) => n + 1);
+    } catch (error) { setReplyFeedback(error.message); }
+    finally { setReplyBusy(false); }
+  }
+
+  async function approveReply(item) {
+    if (!window.confirm(`¿Apruebas el correo ${item.codigo}? Revisa antes la respuesta adjunta.`)) return;
+    try { await approveMailReply(config.number, item.correo_id); setRefreshRecords((n) => n + 1); }
+    catch (error) { setFeedback(error.message); }
+  }
+
+  const toggleExpanded = (id) => setExpanded((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+  // Las respuestas archivadas se muestran dentro de su correo, no como fila aparte.
+  const evidenceRows = evidences.filter((e) => !e.respuesta_de);
+  const usesCodes = evidences.some((e) => e.codigo);
 
   async function verifyEvidence(id) {
     if (!window.confirm("¿Confirmas que revisaste este documento? Esto NO equivale a la aprobación formal de Gerencia.")) return;
@@ -213,18 +245,46 @@ export default function ControlWorkspace({ config }) {
         : <>Todavía no se encuentra un Plan de Seguridad verificado del Control 2 para {year}. Revísalo antes de cerrar la evidencia del semestre.</>}
       </InfoBanner>}
       <Panel title="Repositorio de evidencias" description="Documentación almacenada en el servidor, con su versión, autor y estado de revisión.">
-        {loadingRecords ? <p className="text-sm text-slate-500">Consultando evidencias...</p> : evidences.length === 0
+        {usesCodes && canWrite && <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={searchReplies} disabled={replyBusy} className={SECONDARY}><RefreshCw size={16} className={replyBusy ? "animate-spin" : ""}/>{replyBusy ? "Buscando..." : "Buscar respuestas"}</button>
+          <span className="text-xs text-slate-500">El buzón también se revisa automáticamente cada pocos minutos.</span>
+          {replyFeedback && <span role="status" className="text-sm font-semibold text-slate-700">{replyFeedback}</span>}
+        </div>}
+        {loadingRecords ? <p className="text-sm text-slate-500">Consultando evidencias...</p> : evidenceRows.length === 0
           ? <Empty title="Sin evidencias registradas" description="No existen documentos cargados en el período seleccionado."/>
           : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
               <th className="px-3 py-3">Fecha de carga</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Tipo / referencia</th><th className="px-3 py-3">Revisión</th><th className="px-3 py-3">Acciones</th>
-            </tr></thead><tbody>{evidences.map((item) => <tr key={item.id} className="border-t border-slate-100">
+            </tr></thead><tbody>{evidenceRows.map((item) => {
+              const reply = item.codigo ? (REPLY_STATUS[item.estado_respuesta] || REPLY_STATUS.PENDIENTE) : null;
+              const replies = item.respuestas || [];
+              const open = expanded.includes(item.id);
+              return [<tr key={item.id} className="border-t border-slate-100 align-top">
               <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.creado_en)}</td>
-              <td className="px-3 py-3"><p className="font-semibold text-slate-800">{item.nombre_archivo}</p><p className="text-xs text-slate-500">Subió: {item.creado_por}</p></td>
+              <td className="px-3 py-3"><p className="font-semibold text-slate-800">{item.nombre_archivo}</p>
+                <p className="text-xs text-slate-500">Subió: {item.creado_por}{item.codigo && <> · <span className="font-semibold text-blue-700">Código {item.codigo}</span>{item.origen_correo === "RECORDATORIO" ? " · Notificación" : " · Correo formal"}</>}</p></td>
               <td className="px-3 py-3"><p>{config.evidence.find((x) => x.key === item.tipo)?.label || item.tipo}</p><p className="text-xs text-slate-500">{item.referencia || "Sin referencia"}</p></td>
-              <td className="px-3 py-3"><span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span></td>
+              <td className="px-3 py-3">{reply
+                ? <><span className={`font-semibold ${reply.className}`}>{reply.label}</span>
+                    {reply.help && <p className="mt-1 max-w-[12rem] text-xs text-slate-500">{reply.help}</p>}</>
+                : <span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span>}</td>
               <td className="px-3 py-3"><div className="flex flex-wrap gap-2"><button className={SECONDARY} type="button" onClick={() => downloadControlEvidence(config.number, item.id, item.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar</button>
-              {canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}</div></td>
-            </tr>)}</tbody></table></div>}
+              {item.codigo && <button type="button" className={SECONDARY} onClick={() => toggleExpanded(item.id)} aria-expanded={open}>
+                {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}Respuestas ({replies.length})</button>}
+              {item.codigo && canVerify && item.estado_respuesta === "RESPONDIDO" && <button type="button" className={PRIMARY} onClick={() => approveReply(item)}>Aprobar</button>}
+              {!item.codigo && canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}</div></td>
+            </tr>,
+            open && <tr key={`${item.id}-respuestas`} className="bg-slate-50"><td colSpan={5} className="px-3 py-3">
+              {replies.length === 0
+                ? <p className="text-sm text-slate-500">Todavía no hay respuestas al correo {item.codigo}. Cuando respondan con "OK" (sin cambiar el asunto) se adjuntará aquí y el correo pasará a Aprobado.</p>
+                : <ul className="space-y-2">{replies.map((r) => <li key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <Mail size={16} className="shrink-0 text-blue-600"/>
+                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{r.asunto || `Respuesta a ${item.codigo}`}</p>
+                      <p className="text-xs text-slate-500">De {r.remitente || "remitente desconocido"} · {formatDateTime(r.fecha_recibido)} · {r.aprueba ? <span className="font-semibold text-emerald-700">OK detectado</span> : <span className="font-semibold text-blue-700">Sin OK automático</span>}</p>
+                      {r.extracto && <p className="mt-1 line-clamp-2 text-xs text-slate-600">"{r.extracto}"</p>}</div>
+                    {r.evidencia_id && <button type="button" className={SECONDARY} onClick={() => downloadControlEvidence(config.number, r.evidencia_id, r.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar respuesta</button>}
+                  </li>)}</ul>}
+            </td></tr>];
+            })}</tbody></table></div>}
       </Panel>
       {canWrite && <Panel title="Cargar evidencia" description="Archivos PDF, EML, MSG, Word, Excel o imágenes; máximo 15 MB por archivo.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -260,7 +320,9 @@ export default function ControlWorkspace({ config }) {
       {NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
         title={`Enviar notificación del Control ${config.number}`}
         description="Notificación a los responsables del control. Destinatarios, copias y texto se configuran en backend/config/correos.json; revisa la vista previa antes de enviar."
-        sendLabel="Enviar notificación" hideIfNotAdmin />}
+        sendLabel="Enviar notificación" hideIfNotAdmin onSent={() => setRefreshRecords((n) => n + 1)}
+        repositoryFiles={evidenceRows.filter((e) => !e.codigo).map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
+          origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` }))} />}
       {MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
         evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
         repositoryFiles={[

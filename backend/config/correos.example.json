@@ -27,6 +27,8 @@
         "destinatarios": [
           "responsable@empresa.com"
         ],
+        "_copias": "Copias (CC) solo de esta notificación; se suman a copias_generales y controles.1.copias.",
+        "copias": [],
         "asunto": "SOX Control 1 - Evidencia anual del procedimiento SIS016 | {anio}",
         "cuerpo": [
           "Estimados:",
