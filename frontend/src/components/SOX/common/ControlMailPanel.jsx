@@ -3,6 +3,7 @@ import { Mail, Paperclip, RotateCcw, Send, X } from "lucide-react";
 import { archiveControlMail, getMailConfig, listControlMails, newIdempotencyKey, sendControlMail } from "../../../services/sox/common/controlMail";
 import { downloadControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { FIELD, InfoBanner, Panel, PRIMARY, SECONDARY } from "./ControlUI";
+import RepositoryFilePicker from "./RepositoryFilePicker";
 import { formatDateTime } from "../../../utils/dateTime";
 
 const STATUS = {
@@ -182,16 +183,8 @@ export default function ControlMailPanel({
         {config?.usa_codigo ? ` El asunto llevará el código del correo (p. ej. [SOX 001-1]) para asociar la respuesta "OK"; se archiva en formato ${String(config.formato_archivo).toUpperCase()}.` : ""}
         {config?.dominios_permitidos?.length ? ` Dominios permitidos: ${config.dominios_permitidos.join(", ")}.` : ""}
         {config?.copias_fijas?.length ? ` Copia automática (correos.json): ${config.copias_fijas.join(", ")}.` : ""}</p>
-      {repositoryFiles.length > 0 && <fieldset className="mt-4">
-        <legend className="text-xs font-semibold text-slate-600">Adjuntar desde el repositorio (sin volver a subir el archivo)</legend>
-        <ul className="mt-2 space-y-2">{repositoryFiles.map((f) => <li key={f.id}>
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm hover:bg-slate-100">
-            <input type="checkbox" checked={repoSelected.includes(f.id)} onChange={() => toggleRepo(f.id)} className="h-4 w-4"/>
-            <span className="min-w-0 flex-1"><span className="block truncate font-semibold text-slate-700">{f.nombre}</span>
-              <span className="text-xs text-slate-500">{f.origen}{f.bytes ? ` · ${(f.bytes / 1024).toFixed(1)} KB` : ""}</span></span>
-          </label>
-        </li>)}</ul>
-      </fieldset>}
+      <RepositoryFilePicker files={repositoryFiles} selected={repoSelected} onToggle={toggleRepo}
+        legend="Adjuntar desde el repositorio (sin volver a subir el archivo)"/>
       <label className="mt-4 block text-xs font-semibold text-slate-600">Adjuntos desde tu equipo (máximo {maxCount} en total, {config?.max_adjuntos_mb ?? 3} MB)
         <input type="file" multiple accept={(config?.extensiones || [".pdf", ".docx"]).join(",")} onChange={addFiles}
           className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-100 file:px-4 file:py-2.5 file:font-semibold file:text-blue-800"/>
