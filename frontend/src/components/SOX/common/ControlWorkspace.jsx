@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { readStoredUser } from "../../../services/authSession";
 import { approveMailReply, downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, searchMailReplies, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
-import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, Download, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, CornerDownRight, Download, MailCheck, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
 import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
@@ -20,9 +20,12 @@ const EVIDENCE_PAGE_SIZE = 3;
 // Botón solo con ícono, mismo estilo que los secundarios del SOX.
 const ICON_BUTTON = "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 const REPLY_STATUS = {
-  PENDIENTE: { label: "Pendiente", className: "text-amber-700", help: "Esperando la respuesta \"OK\"." },
-  RESPONDIDO: { label: "Respondido · revisar", className: "text-blue-700", help: "Hay respuesta sin \"OK\" de un destinatario." },
-  APROBADO: { label: "Aprobado", className: "text-emerald-700" },
+  PENDIENTE: { label: "Pendiente", help: "Esperando la respuesta \"OK\".",
+    frame: "border-amber-300", header: "border-amber-200 bg-amber-50 text-amber-800" },
+  RESPONDIDO: { label: "Respondido · revisar", help: "Hay respuesta sin \"OK\" de un destinatario.",
+    frame: "border-blue-300", header: "border-blue-200 bg-blue-50 text-blue-800" },
+  APROBADO: { label: "Aprobado",
+    frame: "border-emerald-300", header: "border-emerald-200 bg-emerald-50 text-emerald-800" },
 };
 
 const VIEWS = [
@@ -265,35 +268,56 @@ export default function ControlWorkspace({ config }) {
           : <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
               <th className="px-3 py-3">Fecha de carga</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Tipo / referencia</th><th className="px-3 py-3">Revisión</th><th className="px-3 py-3">Acciones</th>
             </tr></thead><tbody>{pageRows.map((item) => {
-              const reply = item.codigo ? (REPLY_STATUS[item.estado_respuesta] || REPLY_STATUS.PENDIENTE) : null;
+              const download = (id, name) => downloadControlEvidence(config.number, id, name).catch((e) => setFeedback(e.message));
+              const typeLabel = config.evidence.find((x) => x.key === item.tipo)?.label || item.tipo;
+              if (!item.codigo) return <tr key={item.id} className="border-t border-slate-100 align-top">
+                <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.creado_en)}</td>
+                <td className="px-3 py-3"><p className="font-semibold text-slate-800">{item.nombre_archivo}</p><p className="text-xs text-slate-500">Subió: {item.creado_por}</p></td>
+                <td className="px-3 py-3"><p>{typeLabel}</p><p className="text-xs text-slate-500">{item.referencia || "Sin referencia"}</p></td>
+                <td className="px-3 py-3"><span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span></td>
+                <td className="px-3 py-3"><div className="flex flex-nowrap items-center gap-2">
+                  <button className={ICON_BUTTON} type="button" title="Descargar" aria-label={`Descargar ${item.nombre_archivo}`} onClick={() => download(item.id, item.nombre_archivo)}><Download size={17}/></button>
+                  {canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}</div></td>
+              </tr>;
+              // Correo con código: marco propio con cabecera de color y sus respuestas dentro.
+              const reply = REPLY_STATUS[item.estado_respuesta] || REPLY_STATUS.PENDIENTE;
               const replies = item.respuestas || [];
               const open = expanded.includes(item.id);
-              return [<tr key={item.id} className="border-t border-slate-100 align-top">
-              <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDateTime(item.creado_en)}</td>
-              <td className="px-3 py-3"><p className="font-semibold text-slate-800">{item.nombre_archivo}</p>
-                <p className="text-xs text-slate-500">Subió: {item.creado_por}{item.codigo && <> · <span className="font-semibold text-blue-700">Código {item.codigo}</span>{item.origen_correo === "RECORDATORIO" ? " · Notificación" : " · Correo formal"}</>}</p></td>
-              <td className="px-3 py-3"><p>{config.evidence.find((x) => x.key === item.tipo)?.label || item.tipo}</p><p className="text-xs text-slate-500">{item.referencia || "Sin referencia"}</p></td>
-              <td className="px-3 py-3">{reply
-                ? <><span className={`font-semibold ${reply.className}`}>{reply.label}</span>
-                    {reply.help && <p className="mt-1 max-w-[12rem] text-xs text-slate-500">{reply.help}</p>}</>
-                : <span className={item.estado === "VERIFICADA" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{item.estado}</span>}</td>
-              <td className="px-3 py-3"><div className="flex flex-nowrap items-center gap-2"><button className={ICON_BUTTON} type="button" title="Descargar" aria-label={`Descargar ${item.nombre_archivo}`} onClick={() => downloadControlEvidence(config.number, item.id, item.nombre_archivo).catch((e) => setFeedback(e.message))}><Download size={17}/></button>
-              {item.codigo && <button type="button" className={`${SECONDARY} whitespace-nowrap`} onClick={() => toggleExpanded(item.id)} aria-expanded={open}>
-                {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}Respuestas ({replies.length})</button>}
-              {item.codigo && canVerify && item.estado_respuesta === "RESPONDIDO" && <button type="button" className={PRIMARY} onClick={() => approveReply(item)}>Aprobar</button>}
-              {!item.codigo && canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}</div></td>
-            </tr>,
-            open && <tr key={`${item.id}-respuestas`} className="bg-slate-50"><td colSpan={5} className="px-3 py-3">
-              {replies.length === 0
-                ? <p className="text-sm text-slate-500">Todavía no hay respuestas al correo {item.codigo}. Cuando respondan con "OK" (sin cambiar el asunto) se adjuntará aquí y el correo pasará a Aprobado.</p>
-                : <ul className="space-y-2">{replies.map((r) => <li key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-                    <Mail size={16} className="shrink-0 text-blue-600"/>
-                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{r.asunto || `Respuesta a ${item.codigo}`}</p>
-                      <p className="text-xs text-slate-500">De {r.remitente || "remitente desconocido"} · {formatDateTime(r.fecha_recibido)} · {r.aprueba ? <span className="font-semibold text-emerald-700">OK detectado</span> : <span className="font-semibold text-blue-700">Sin OK automático</span>}</p>
-                      {r.extracto && <p className="mt-1 line-clamp-2 text-xs text-slate-600">"{r.extracto}"</p>}</div>
-                    {r.evidencia_id && <button type="button" className={ICON_BUTTON} title="Descargar respuesta" aria-label={`Descargar ${r.nombre_archivo || "respuesta"}`} onClick={() => downloadControlEvidence(config.number, r.evidencia_id, r.nombre_archivo).catch((e) => setFeedback(e.message))}><Download size={17}/></button>}
-                  </li>)}</ul>}
-            </td></tr>];
+              const parent = item.codigo.includes(".") ? item.codigo.split(".")[0] : null;
+              const HeaderIcon = item.estado_respuesta === "APROBADO" ? MailCheck : Mail;
+              return <tr key={item.id} className="align-top"><td colSpan={5} className="px-0 py-2">
+                <div className={`overflow-hidden rounded-xl border ${reply.frame}`}>
+                  <div className={`flex flex-wrap items-center gap-2 border-b px-4 py-2 ${reply.header}`}>
+                    <HeaderIcon size={17} className="shrink-0"/>
+                    <span className="font-semibold">SOX {item.codigo}</span>
+                    <span className="text-sm">· {item.origen_correo === "RECORDATORIO" ? "Notificación" : "Correo formal"}{parent ? ` · reenvío de ${parent}` : ""}</span>
+                    <span className="ml-auto font-semibold">{reply.label}</span>
+                  </div>
+                  <div className="grid gap-3 bg-white px-4 py-3 md:grid-cols-[9rem_minmax(0,1fr)_14rem_auto] md:items-start">
+                    <span className="whitespace-nowrap text-slate-600">{formatDateTime(item.creado_en)}</span>
+                    <div className="min-w-0"><p className="break-words font-semibold text-slate-800">{item.nombre_archivo}</p><p className="text-xs text-slate-500">Subió: {item.creado_por}</p></div>
+                    <div><p>{typeLabel}</p><p className="text-xs text-slate-500">{item.correo_id ? `Correo SOX #${item.correo_id}` : item.referencia}</p>
+                      {reply.help && <p className="mt-1 text-xs text-slate-500">{reply.help}</p>}</div>
+                    <div className="flex flex-nowrap items-center gap-2">
+                      <button className={ICON_BUTTON} type="button" title="Descargar" aria-label={`Descargar ${item.nombre_archivo}`} onClick={() => download(item.id, item.nombre_archivo)}><Download size={17}/></button>
+                      <button type="button" className={`${SECONDARY} whitespace-nowrap`} onClick={() => toggleExpanded(item.id)} aria-expanded={open}>
+                        {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}Respuestas ({replies.length})</button>
+                      {canVerify && item.estado_respuesta === "RESPONDIDO" && <button type="button" className={PRIMARY} onClick={() => approveReply(item)}>Aprobar</button>}
+                    </div>
+                  </div>
+                  {open && <div className="bg-white px-4 pb-3">
+                    {replies.length === 0
+                      ? <p className="ml-4 border-l-2 border-slate-300 py-2 pl-3 text-sm text-slate-500">Sin respuestas todavía. Cuando respondan "OK" a SOX {item.codigo} (sin cambiar el asunto) se adjunta aquí y el correo pasa a Aprobado.</p>
+                      : <ul className="space-y-2">{replies.map((r) => <li key={r.id} className={`ml-4 flex flex-wrap items-center gap-3 border-l-2 py-2 pl-3 ${r.aprueba ? "border-emerald-400" : "border-blue-400"}`}>
+                          <CornerDownRight size={16} className="shrink-0 text-slate-400"/>
+                          <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-800">Respuesta a SOX {item.codigo}</p>
+                            <p className="text-xs text-slate-500">De {r.remitente || "remitente desconocido"} · {formatDateTime(r.fecha_recibido)} · {r.aprueba ? <span className="font-semibold text-emerald-700">OK detectado</span> : <span className="font-semibold text-blue-700">Sin OK automático</span>}</p>
+                            {r.extracto && <p className="mt-1 line-clamp-2 text-xs text-slate-600">"{r.extracto}"</p>}</div>
+                          {r.evidencia_id && <button type="button" className={ICON_BUTTON} title="Descargar respuesta" aria-label={`Descargar ${r.nombre_archivo || "respuesta"}`} onClick={() => download(r.evidencia_id, r.nombre_archivo)}><Download size={17}/></button>}
+                        </li>)}</ul>}
+                  </div>}
+                </div>
+              </td></tr>;
             })}</tbody></table>
             {evidenceRows.length > EVIDENCE_PAGE_SIZE && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
               <span>Mostrando {(currentPage - 1) * EVIDENCE_PAGE_SIZE + 1}–{Math.min(currentPage * EVIDENCE_PAGE_SIZE, evidenceRows.length)} de {evidenceRows.length} evidencias</span>
