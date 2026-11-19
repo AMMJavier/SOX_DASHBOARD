@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from auth.dependencies import get_current_user
 from models import Usuario
 from services.sox.control_6.cortes import cut_accounts, latest_cut, from_live_report, store_cut
-from services.sox.control_6.ldap_access import LDAPAccessError, read_internal_access
+# La lectura LDAP de VPN pertenece al Control 7; Control 6 queda pendiente de reestructurar.
+from services.sox.control_7.ldap_vpn import LDAPAccessError, read_internal_access
 
 router = APIRouter(prefix="/controls/6/ldap/cortes", tags=["SOX Control 6 - cortes LDAP"])
 

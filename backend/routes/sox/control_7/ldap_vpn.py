@@ -1,15 +1,15 @@
-"""Endpoint read-only de dos grupos LDAP internos para Control 6."""
+"""Control 7 - VPN internas: consulta read-only de los dos grupos LDAP de VPN (RDP y Aplicaciones)."""
 from fastapi import APIRouter, Depends, HTTPException
 
 from auth.dependencies import get_current_user
 from models import Usuario
-from services.sox.control_6.ldap_access import read_internal_access, LDAPAccessError
+from services.sox.control_7.ldap_vpn import read_internal_access, LDAPAccessError
 
-router = APIRouter(prefix="/controls/6", tags=["SOX control 6 - LDAP"])
+router = APIRouter(prefix="/controls/7/internas", tags=["SOX - Control 7 VPN internas"])
 
 
 @router.get("/ldap/accesos")
-def ldap_access(current: Usuario = Depends(get_current_user)):
+def ldap_vpn_access(current: Usuario = Depends(get_current_user)):
     if current.rol not in ("administrador", "desarrollador"):
         raise HTTPException(403, "Sin permisos para consultar grupos de acceso interno")
     try:

@@ -58,7 +58,7 @@ def load_from_ldap(db, campaign_id=None):
     """Foto LDAP de la campaña activa con el GERENTE de cada cuenta (primer cargo "Gerente"
     en la cadena de jefes de AD). Si el gerente no cambió se conserva la decisión; si cambió,
     la cuenta vuelve a pendiente para el nuevo gerente y el cambio queda en el seguimiento."""
-    from services.sox.control_6.ldap_access import LDAPAccessError, read_internal_access_with_managers
+    from services.sox.control_7.ldap_vpn import LDAPAccessError, read_internal_access_with_managers
 
     campaign = active_campaign(db)
     if campaign_id is None:

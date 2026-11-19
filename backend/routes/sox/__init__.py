@@ -20,7 +20,7 @@ from routes.sox.control_6.conciliations import router as controls_c6_conciliatio
 from routes.sox.common.evidence import router as controls_evidence_router
 from routes.sox.common.reminders import router as controls_reminders_router
 from routes.sox.common.mail import router as controls_mail_router
-from routes.sox.control_6.ldap_access import router as controls_ldap_access_router
+from routes.sox.control_7.ldap_vpn import router as internal_vpn_ldap_router
 from routes.sox.control_6.cortes import router as controls_c6_cortes_router
 # ==========================================================
 # CONFIGURACIÓN DEL ROUTER SOX
@@ -48,5 +48,5 @@ router.include_router(controls_evidence_router)
 
 router.include_router(controls_reminders_router)
 router.include_router(controls_mail_router)
-router.include_router(controls_ldap_access_router)
+router.include_router(internal_vpn_ldap_router)
 router.include_router(controls_c6_cortes_router)

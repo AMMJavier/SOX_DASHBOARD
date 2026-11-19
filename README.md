@@ -78,8 +78,8 @@ backend/
 ├── services/sox/
 │   ├── common/                 mail_config (correos.json), mail_service, reminder_service,
 │   │                           reminder_scheduler (envío automático)
-│   ├── control_6/              Conciliación, cortes LDAP
-│   └── control_7/              Avisos a gerentes, sincronización de contactos LDAP
+│   ├── control_6/              Conciliación, cortes (pendiente de reestructurar)
+│   └── control_7/              VPN internas (ldap_vpn: grupos LDAP RDP/Aplicaciones), avisos a gerentes
 ├── scripts/                    sox_graph_mail.py (worker Graph), migración Assets, utilidades
 ├── sql/                        Scripts Oracle y PostgreSQL
 └── config/                     correos.example.json (plantilla; los .json reales no se versionan)

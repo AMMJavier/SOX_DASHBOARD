@@ -1,11 +1,14 @@
-"""SOX Control 6: lectura de membresías directas LDAP RDP/Aplicaciones.
+"""SOX Control 7 - VPN internas: lectura de los grupos LDAP de VPN (RDP y Aplicaciones).
 
-NO escribe en Active Directory, ni necesita CSV. La persistencia Oracle
-se realiza de manera independiente tras obtener los DOS grupos completos.
+Todo lo de VPN de LDAP (LDAP_VPN_RDP_CONECEL y LDAP_VPN_APLICACIONES_CONECEL) vive aquí,
+en el Control 7. NO escribe en Active Directory ni necesita CSV.
 
-Modo predeterminado: STARTTLS y validación de certificado. Una excepción
-TEMPORAL y EXPLÍCITA para STARTTLS no verificado se limita al Control 6;
-no modifica el servicio LDAP de autenticación del portal.
+Variables del .env: LDAP7_SERVER, LDAP7_MODE, LDAP7_ALLOW_UNVERIFIED_TLS, LDAP7_CA_CERT,
+LDAP7_PAGE_SIZE, LDAP7_MAX_USERS_PER_GROUP, LDAP7_CONNECT_TIMEOUT y LDAP7_READ_TIMEOUT.
+Mientras el .env del servidor tenga los nombres antiguos LDAP6_*, se leen como respaldo.
+
+Modo predeterminado: STARTTLS y validación de certificado. STARTTLS no verificado es una
+excepción TEMPORAL y EXPLÍCITA; no modifica el LDAP de autenticación del portal.
 """
 
 from datetime import datetime, timezone
@@ -30,23 +33,35 @@ class LDAPAccessError(Exception):
     """Error controlado sin revelar cuentas ni credenciales LDAP."""
 
 
+CONTEXT = "Control 7 (VPN internas)"
+
+
+def _env(name, default=None):
+    """LDAP7_<name>; si no existe, el nombre antiguo LDAP6_<name> (compatibilidad del .env)."""
+    value = os.getenv("LDAP7_" + name)
+    if value is None or not value.strip():
+        value = os.getenv("LDAP6_" + name)
+    return default if value is None or not value.strip() else value
+
+
 def _enabled(value):
     return str(value or "").strip().lower() in ("true", "yes", "1", "on")
 
 
 def _integer(name, default, minimum, maximum):
+    """Entero LDAP7_<name> (o LDAP6_<name>) dentro de sus límites."""
     try:
-        result = int(os.getenv(name, str(default)))
+        result = int(_env(name, str(default)))
     except ValueError as exc:
-        raise LDAPAccessError("Parámetro LDAP6 inválido") from exc
+        raise LDAPAccessError("Parámetro LDAP7_" + name + " inválido") from exc
     if not minimum <= result <= maximum:
-        raise LDAPAccessError("Parámetro LDAP6 fuera del límite permitido")
+        raise LDAPAccessError("Parámetro LDAP7_" + name + " fuera del límite permitido")
     return result
 
 
-def _open_connection(context="Control 6"):
-    """Conexión LDAP de servicio. context solo cambia el texto del aviso (Control 6 o Control 7)."""
-    server_url = (os.getenv("LDAP6_SERVER") or os.getenv("LDAP_SERVER") or "").strip()
+def _open_connection(context=CONTEXT):
+    """Conexión LDAP de servicio para leer los grupos de VPN."""
+    server_url = (_env("SERVER") or os.getenv("LDAP_SERVER") or "").strip()
     base = (os.getenv("LDAP_BASE_DN") or "").strip()
     service_user = (os.getenv("LDAP_SERVICE_USER") or "").strip()
     service_password = os.getenv("LDAP_SERVICE_PASSWORD") or ""
@@ -55,28 +70,28 @@ def _open_connection(context="Control 6"):
 
     parsed = urlparse(server_url if "://" in server_url else "ldap://" + server_url)
     if parsed.scheme not in ("ldap", "ldaps") or not parsed.hostname:
-        raise LDAPAccessError("LDAP6_SERVER no contiene una dirección LDAP válida")
+        raise LDAPAccessError("LDAP7_SERVER no contiene una dirección LDAP válida")
 
-    mode = os.getenv("LDAP6_MODE", "starttls_verified").strip().lower()
+    mode = _env("MODE", "starttls_verified").strip().lower()
     if mode not in ("starttls_verified", "starttls_unverified", "ldaps_verified"):
-        raise LDAPAccessError("LDAP6_MODE debe ser starttls_verified, starttls_unverified o ldaps_verified")
+        raise LDAPAccessError("LDAP7_MODE debe ser starttls_verified, starttls_unverified o ldaps_verified")
 
     if mode == "ldaps_verified" and parsed.scheme != "ldaps":
-        raise LDAPAccessError("ldaps_verified requiere LDAP6_SERVER=ldaps://...")
+        raise LDAPAccessError("ldaps_verified requiere LDAP7_SERVER=ldaps://...")
     if mode != "ldaps_verified" and parsed.scheme != "ldap":
-        raise LDAPAccessError("STARTTLS requiere LDAP6_SERVER=ldap://...")
+        raise LDAPAccessError("STARTTLS requiere LDAP7_SERVER=ldap://...")
 
-    ca_path = (os.getenv("LDAP6_CA_CERT") or os.getenv("LDAP_CA_CERT") or "").strip()
+    ca_path = (_env("CA_CERT") or os.getenv("LDAP_CA_CERT") or "").strip()
     if mode == "starttls_unverified":
         # Conserva el cifrado, pero desactiva autenticación del servidor:
         # una excepción limitada y temporal, nunca el modo por defecto.
-        if not _enabled(os.getenv("LDAP6_ALLOW_UNVERIFIED_TLS")):
+        if not _enabled(_env("ALLOW_UNVERIFIED_TLS")):
             raise LDAPAccessError("STARTTLS sin CA requiere habilitación explícita de seguridad")
         tls = Tls(validate=ssl.CERT_NONE)
         logger.warning("%s usa STARTTLS SIN verificar la identidad del servidor LDAP", context)
     else:
         if ca_path and not Path(ca_path).is_file():
-            raise LDAPAccessError("No se encuentra el archivo CA corporativo LDAP6")
+            raise LDAPAccessError("No se encuentra el archivo CA corporativo LDAP (LDAP7_CA_CERT)")
         tls = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ca_path or None)
 
     server = Server(
@@ -85,14 +100,14 @@ def _open_connection(context="Control 6"):
         use_ssl=(mode == "ldaps_verified"),
         tls=tls,
         get_info=NONE,
-        connect_timeout=_integer("LDAP6_CONNECT_TIMEOUT", 8, 2, 60),
+        connect_timeout=_integer("CONNECT_TIMEOUT", 8, 2, 60),
     )
     conn = Connection(
         server,
         user=service_user,
         password=service_password,
         authentication=SIMPLE,
-        receive_timeout=_integer("LDAP6_READ_TIMEOUT", 30, 5, 120),
+        receive_timeout=_integer("READ_TIMEOUT", 30, 5, 120),
         auto_referrals=False,
         raise_exceptions=True,
     )
@@ -134,7 +149,7 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
     """Busca usuarios directamente miembros del grupo mediante páginas AD.
 
     No equivale a grupos anidados ni a sesiones VPN conectadas.
-    with_manager=True agrega el DN del jefe ("manager" de AD) en "manager_dn" (Control 7).
+    with_manager=True agrega el DN del jefe ("manager" de AD) en "manager_dn".
     """
     search_filter = (
         "(&(objectCategory=person)(objectClass=user)(memberOf="
@@ -176,7 +191,7 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
     return accounts
 
 
-# Control 7: el responsable de una VPN interna es el primer GERENTE de la cadena de jefes
+# El responsable de una VPN interna es el primer GERENTE de la cadena de jefes
 # de AD (atributo "manager"), no el jefe directo (que puede ser jefe o coordinador).
 MANAGER_TITLE_PREFIX = "gerente"
 MAX_MANAGER_LEVELS = 10
@@ -238,17 +253,17 @@ def _find_manager(conn, dn, people, found):
 
 
 def read_internal_access_with_managers():
-    """Control 7 (VPN internas): membresías RDP/APLICACIONES con el GERENTE de cada cuenta.
+    """VPN internas: membresías RDP/APLICACIONES con el GERENTE de cada cuenta.
 
     Devuelve una fila por (cuenta, grupo): usuario, nombre, activo, tipo_acceso y
     gerente {usuario, nombre, correo, cargo}: el primer jefe de la cadena de AD cuyo cargo
     empieza con "Gerente"; None si la cuenta no tiene jefe o no hay gerente en la cadena.
     """
-    page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
-    max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
+    page_size = _integer("PAGE_SIZE", 200, 20, 1000)
+    max_users = _integer("MAX_USERS_PER_GROUP", 5000, 100, 20000)
     conn = None
     try:
-        conn, base = _open_connection("Control 7 (VPN internas)")
+        conn, base = _open_connection()
         rows, people, found = [], {}, {}
         for access_type, group_name in LDAP_GROUPS.items():
             dn = _group_dn(conn, base, group_name)
@@ -276,9 +291,12 @@ def read_internal_access_with_managers():
 
 
 def read_internal_access():
-    """Consulta ambos grupos antes de permitir guardar un corte Oracle."""
-    page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
-    max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
+    """Cuentas únicas de los dos grupos de VPN con sus fuentes (sin gerente).
+
+    Hoy también la usan los cortes LDAP del Control 6, que está pendiente de reestructurar.
+    """
+    page_size = _integer("PAGE_SIZE", 200, 20, 1000)
+    max_users = _integer("MAX_USERS_PER_GROUP", 5000, 100, 20000)
     conn = None
     try:
         conn, base = _open_connection()
@@ -308,8 +326,8 @@ def read_internal_access():
     except LDAPAccessError:
         raise
     except Exception as exc:
-        logger.warning("Control 6: lectura LDAP fallida (%s), sin datos personales", type(exc).__name__)
-        raise LDAPAccessError("No se completó la consulta LDAP; no se guardó ningún corte") from exc
+        logger.warning("Control 7 internas: lectura LDAP de membresías fallida (%s)", type(exc).__name__)
+        raise LDAPAccessError("No se completó la consulta LDAP de VPN internas") from exc
     finally:
         if conn is not None:
             try:

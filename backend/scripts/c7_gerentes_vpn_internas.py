@@ -1,10 +1,10 @@
 """Control 7 - VPN internas: listado de GERENTES responsables de las VPN internas.
 
 SOLO LECTURA: consulta el mismo LDAP y los mismos grupos que la carga de la campaña
-(LDAP_VPN_RDP_CONECEL y LDAP_VPN_APLICACIONES_CONECEL), con la misma conexión del .env.
+(LDAP_VPN_RDP_CONECEL y LDAP_VPN_APLICACIONES_CONECEL), con la misma conexión del .env (LDAP7_*).
 No escribe en Active Directory ni en Oracle.
 
-Aplica la MISMA regla que la plataforma (services/sox/control_6/ldap_access.py): por cada
+Aplica la MISMA regla que la plataforma (services/sox/control_7/ldap_vpn.py): por cada
 cuenta sube por la cadena de jefes de AD ("manager") hasta el primer cargo que empieza con
 "Gerente". El jefe directo (jefe, coordinador...) solo se muestra en --detalle.
 
@@ -25,7 +25,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(os.path.join(BACKEND, ".env"))
 
-from services.sox.control_6.ldap_access import (  # noqa: E402
+from services.sox.control_7.ldap_vpn import (  # noqa: E402
     LDAP_GROUPS, _direct_users, _find_manager, _group_dn, _integer, _open_connection, _person,
 )
 
@@ -34,9 +34,9 @@ SIN_GERENTE = "(sin gerente en AD)"
 
 def collect():
     """Recorre los dos grupos y agrupa las cuentas por su gerente."""
-    page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
-    max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
-    conn, base = _open_connection("Control 7 (VPN internas)")
+    page_size = _integer("PAGE_SIZE", 200, 20, 1000)
+    max_users = _integer("MAX_USERS_PER_GROUP", 5000, 100, 20000)
+    conn, base = _open_connection()
     people, found, managers, users = {}, {}, {}, set()
     try:
         for access_type, group_name in LDAP_GROUPS.items():
