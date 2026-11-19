@@ -36,7 +36,7 @@ def collect():
     """Recorre los dos grupos y agrupa las cuentas por su gerente."""
     page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
     max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
-    conn, base = _open_connection()
+    conn, base = _open_connection("Control 7 (VPN internas)")
     people, found, managers, users = {}, {}, {}, set()
     try:
         for access_type, group_name in LDAP_GROUPS.items():

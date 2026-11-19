@@ -44,7 +44,8 @@ def _integer(name, default, minimum, maximum):
     return result
 
 
-def _open_connection():
+def _open_connection(context="Control 6"):
+    """Conexión LDAP de servicio. context solo cambia el texto del aviso (Control 6 o Control 7)."""
     server_url = (os.getenv("LDAP6_SERVER") or os.getenv("LDAP_SERVER") or "").strip()
     base = (os.getenv("LDAP_BASE_DN") or "").strip()
     service_user = (os.getenv("LDAP_SERVICE_USER") or "").strip()
@@ -72,7 +73,7 @@ def _open_connection():
         if not _enabled(os.getenv("LDAP6_ALLOW_UNVERIFIED_TLS")):
             raise LDAPAccessError("STARTTLS sin CA requiere habilitación explícita de seguridad")
         tls = Tls(validate=ssl.CERT_NONE)
-        logger.warning("Control 6 usa STARTTLS SIN verificar la identidad del servidor LDAP")
+        logger.warning("%s usa STARTTLS SIN verificar la identidad del servidor LDAP", context)
     else:
         if ca_path and not Path(ca_path).is_file():
             raise LDAPAccessError("No se encuentra el archivo CA corporativo LDAP6")
@@ -247,7 +248,7 @@ def read_internal_access_with_managers():
     max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
     conn = None
     try:
-        conn, base = _open_connection()
+        conn, base = _open_connection("Control 7 (VPN internas)")
         rows, people, found = [], {}, {}
         for access_type, group_name in LDAP_GROUPS.items():
             dn = _group_dn(conn, base, group_name)
