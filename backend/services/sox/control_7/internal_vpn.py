@@ -1,8 +1,8 @@
 """Control 7 - VPN internas (LDAP RDP / APLICACIONES) validadas por el gerente.
 
 Misma campaña semestral que las VPN externas (AUTOM.CAMPANAS_SOX). Al iniciar la campaña
-(o con "Cargar desde LDAP") se toma la foto de los grupos del Control 6 con el GERENTE de cada
-cuenta según Active Directory ("manager"). El gerente solo ve y confirma SUS cuentas: la
+(o con "Cargar desde LDAP") se toma la foto de los grupos LDAP de VPN (RDP y Aplicaciones) con el GERENTE de cada
+cuenta: el primer cargo "Gerente" en la cadena de jefes de AD. El gerente solo ve y confirma SUS cuentas: la
 pertenencia se comprueba en el backend con GERENTE_USUARIO = usuario en sesión.
 Tablas: backend/sql/sox_c7_vpn_internas.sql.
 """
