@@ -53,4 +53,17 @@ export async function loadInternalFromLdap(reemplazar = false) {
   return (await api.post("/sox/campaign/internas/cargar", null, { params: { reemplazar } })).data;
 }
 
+// Gerente asignado a mano a cuentas sin gerente en AD (casos especiales).
+export async function getInternalManagers() {
+  return (await api.get("/sox/campaign/internas/gerentes")).data;
+}
+
+export async function lookupInternalManager(usuario) {
+  return (await api.get(`/sox/campaign/internas/gerentes/ad/${encodeURIComponent(usuario)}`)).data;
+}
+
+export async function assignInternalManager({ ids, usuario, nombre = null, correo = null }) {
+  return (await api.post("/sox/campaign/internas/asignar-gerente", { ids, usuario, nombre, correo })).data;
+}
+
 export const errorText = (error, fallback) => error?.response?.data?.detail || error?.message || fallback;

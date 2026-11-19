@@ -125,6 +125,40 @@ def internal_notifications_send(payload: NoticeRequest, background: BackgroundTa
             "mensaje": "Envío iniciado en segundo plano. Actualiza la vista para ver el avance."}
 
 
+class ManualManager(BaseModel):
+    ids: List[int] = Field(..., min_length=1, max_length=2000)
+    usuario: str = Field(..., max_length=100)
+    nombre: Optional[str] = Field(None, max_length=200)
+    correo: Optional[str] = Field(None, max_length=254)
+
+
+@router.get("/campaign/internas/gerentes")
+def internal_managers(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    """Gerentes que ya tienen cuentas en la campaña activa (para asignar a mano)."""
+    _admin(current)
+    return service.campaign_managers(db)
+
+
+@router.get("/campaign/internas/gerentes/ad/{usuario}")
+async def internal_manager_lookup(usuario: str, current: Usuario = Depends(get_current_user)):
+    """Busca un usuario en AD para completar el nombre y el correo del gerente."""
+    _admin(current)
+    person = await run_in_threadpool(service.find_ad_manager, usuario)
+    if not person:
+        raise HTTPException(404, "El usuario no existe en AD: escribe el nombre y el correo a mano")
+    return person
+
+
+@router.post("/campaign/internas/asignar-gerente")
+async def internal_assign_manager(payload: ManualManager, db: Session = Depends(get_oracle_db),
+                                  current: Usuario = Depends(get_current_user)):
+    """El administrador asigna un gerente a cuentas sin gerente en AD (casos especiales)."""
+    _admin(current)
+    return await run_in_threadpool(lambda: service.assign_manager(
+        db, item_ids=payload.ids, usuario=payload.usuario, nombre=payload.nombre, correo=payload.correo,
+        user=current))
+
+
 @router.post("/campaign/internas/cargar")
 async def load_internal(reemplazar: bool = Query(False), db: Session = Depends(get_oracle_db),
                         current: Usuario = Depends(get_current_user)):

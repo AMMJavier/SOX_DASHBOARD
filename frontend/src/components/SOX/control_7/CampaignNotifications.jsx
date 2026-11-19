@@ -36,6 +36,7 @@ export default function CampaignNotifications({
   sendData = sendCampaignNotifications,
   description = "Aviso individual de apertura a cada gerente con VPN en la campaña activa. El correo no reemplaza la validación en el portal.",
   itemLabel = "VPN",
+  refreshKey = 0, // al cambiar, vuelve a leer (p. ej. tras asignar un gerente a mano)
 }) {
   const isAdmin = readStoredUser()?.rol === "administrador";
   const [data, setData] = useState(null);
@@ -51,7 +52,7 @@ export default function CampaignNotifications({
     finally { setLoading(false); }
   }, [fetchData]);
 
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
+  useEffect(() => { if (isAdmin) load(); }, [isAdmin, load, refreshKey]);
   // Mientras hay un envío en segundo plano, refrescar el avance cada 5 segundos.
   useEffect(() => {
     if (!data?.en_proceso) return undefined;

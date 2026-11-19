@@ -334,3 +334,33 @@ def read_internal_access():
                 conn.unbind()
             except Exception:
                 pass
+
+
+def find_person(username):
+    """Datos de AD de un usuario de red (para asignar un gerente a mano): None si no existe."""
+    conn = None
+    try:
+        conn, base = _open_connection()
+        conn.search(search_base=base, search_scope=SUBTREE,
+                    search_filter="(&(objectCategory=person)(objectClass=user)(sAMAccountName="
+                                  + escape_filter_chars(username) + "))",
+                    attributes=["sAMAccountName", "displayName", "mail", "title", "department"], size_limit=2)
+        if len(conn.entries) != 1:
+            return None
+        attrs = conn.entries[0].entry_attributes_as_dict
+        return {"usuario": str(_first(attrs.get("sAMAccountName")) or username).strip().lower()[:100],
+                "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
+                "correo": str(_first(attrs.get("mail")) or "").strip() or None,
+                "cargo": str(_first(attrs.get("title")) or "").strip(),
+                "departamento": str(_first(attrs.get("department")) or "").strip()}
+    except LDAPAccessError:
+        raise
+    except Exception as exc:
+        logger.warning("Control 7 internas: búsqueda LDAP de gerente fallida (%s)", type(exc).__name__)
+        raise LDAPAccessError("No se pudo consultar el usuario en LDAP") from exc
+    finally:
+        if conn is not None:
+            try:
+                conn.unbind()
+            except Exception:
+                pass

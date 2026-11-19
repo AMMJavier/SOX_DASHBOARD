@@ -54,6 +54,29 @@ def active_campaign(db):
 
 # ---------------------------------------------------------------- carga desde LDAP
 
+def _manual_assignments(db, campaign_id, current):
+    """Gerentes asignados a mano: los de esta campaña y, si no hay, el último de campañas anteriores.
+
+    Devuelve {(usuario, tipo_acceso): {usuario, nombre, correo}}.
+    """
+    found = {}
+    for key, r in current.items():
+        if r["gerente_manual"] == 1 and r["gerente_usuario"]:
+            found[key] = {"usuario": r["gerente_usuario"], "nombre": r["gerente"], "correo": r["gerente_correo"]}
+    previous = db.execute(text("""
+        SELECT USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
+               GERENTE_USUARIO AS "gerente_usuario", GERENTE_CORREO AS "gerente_correo"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS
+         WHERE GERENTE_MANUAL = 1 AND GERENTE_USUARIO IS NOT NULL AND ID_CAMPANA <> :p_camp
+         ORDER BY ID_CAMPANA DESC
+    """), {"p_camp": campaign_id}).mappings()
+    for r in previous:
+        key = (r["usuario"], r["tipo_acceso"])
+        if key not in found:
+            found[key] = {"usuario": r["gerente_usuario"], "nombre": r["gerente"], "correo": r["gerente_correo"]}
+    return found
+
+
 def load_from_ldap(db, campaign_id=None, replace=False):
     """Foto LDAP de la campaña activa con el GERENTE de cada cuenta (primer cargo "Gerente"
     en la cadena de jefes de AD). Si el gerente no cambió se conserva la decisión; si cambió,
@@ -61,7 +84,10 @@ def load_from_ldap(db, campaign_id=None, replace=False):
 
     replace=True BORRA la foto anterior de la campaña (cuentas y su seguimiento) y la vuelve a
     cargar desde cero. Se usa al iniciar la campaña y con "Reemplazar carga". Primero se lee LDAP:
-    si LDAP falla no se borra nada. No se permite si algún gerente ya confirmó cuentas."""
+    si LDAP falla no se borra nada. No se permite si algún gerente ya confirmó cuentas.
+
+    Las cuentas sin gerente en AD conservan el gerente que les asignó el administrador
+    (GERENTE_MANUAL = 1), también de una campaña anterior. Si AD ya tiene gerente, manda AD."""
     from services.sox.control_7.ldap_vpn import LDAPAccessError, read_internal_access_with_managers
 
     campaign = active_campaign(db)
@@ -76,11 +102,21 @@ def load_from_ldap(db, campaign_id=None, replace=False):
         log(f"CARGA FALLIDA | {exc}")
         raise HTTPException(502, str(exc))
 
+    now = datetime.utcnow()
+    # Estado actual de la campaña (se lee ANTES de un posible reemplazo): para detectar
+    # cambios de gerente y conservar los gerentes asignados a mano por el administrador.
+    current = {(r["usuario"], r["tipo_acceso"]): r for r in db.execute(text("""
+        SELECT ID AS "id", USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
+               GERENTE_USUARIO AS "gerente_usuario", GERENTE_CORREO AS "gerente_correo",
+               GERENTE_MANUAL AS "gerente_manual", ESTADO AS "estado", OBSERVACION AS "observacion",
+               CONFIRMACION AS "confirmacion"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
+    """), {"p_camp": campaign_id}).mappings()}
+    manual = _manual_assignments(db, campaign_id, current)
+
     deleted = 0
     if replace:
-        confirmed = db.execute(text(
-            "SELECT COUNT(*) FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp AND CONFIRMACION = 1"
-        ), {"p_camp": campaign_id}).scalar() or 0
+        confirmed = sum(1 for r in current.values() if r["confirmacion"] == 1)
         if confirmed:
             log(f"REEMPLAZO CANCELADO | campaña {campaign_id} | {confirmed} cuenta(s) ya confirmadas por gerentes")
             raise HTTPException(409, f"No se puede reemplazar la carga: {confirmed} cuenta(s) ya fueron "
@@ -89,22 +125,21 @@ def load_from_ldap(db, campaign_id=None, replace=False):
         deleted = db.execute(text("DELETE FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp"),
                              {"p_camp": campaign_id}).rowcount or 0
         log(f"REEMPLAZO | campaña {campaign_id} | {deleted} registro(s) anteriores borrados")
+        current = {}
 
-    now = datetime.utcnow()
     managers = {}
     without_manager = 0
+    kept_manual = 0
     reassigned = 0
-    # Estado actual de la campaña: para detectar cambios de gerente.
-    current = {(r["usuario"], r["tipo_acceso"]): r for r in db.execute(text("""
-        SELECT ID AS "id", USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
-               GERENTE_USUARIO AS "gerente_usuario", ESTADO AS "estado", OBSERVACION AS "observacion",
-               CONFIRMACION AS "confirmacion"
-          FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
-    """), {"p_camp": campaign_id}).mappings()}
     for row in report["filas"]:
         manager = row.get("gerente")
+        is_manual = 0
         if manager:
             managers[manager["usuario"]] = manager
+        elif (row["usuario"], row["tipo_acceso"]) in manual:
+            # Sin gerente en AD: se conserva el que asignó el administrador.
+            manager, is_manual = manual[(row["usuario"], row["tipo_acceso"])], 1
+            kept_manual += 1
         else:
             without_manager += 1
         # Cambio de gerente: el nuevo NO hereda la decisión del anterior. Si ya estaba
@@ -133,6 +168,7 @@ def load_from_ldap(db, campaign_id=None, replace=False):
             WHEN MATCHED THEN UPDATE SET
                  d.NOMBRE = :p_nombre, d.ACTIVO_AD = :p_activo,
                  d.GERENTE = :p_ger, d.GERENTE_USUARIO = :p_ger_user, d.GERENTE_CORREO = :p_ger_mail,
+                 d.GERENTE_MANUAL = :p_manual,
                  d.CONFIRMACION = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
                                        THEN d.CONFIRMACION ELSE 0 END,
                  d.ESTADO = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
@@ -143,15 +179,15 @@ def load_from_ldap(db, campaign_id=None, replace=False):
                                          THEN d.CONFIRMADO_POR ELSE NULL END
             WHEN NOT MATCHED THEN INSERT
                  (ID_CAMPANA, USUARIO, NOMBRE, TIPO_ACCESO, ACTIVO_AD, GERENTE, GERENTE_USUARIO, GERENTE_CORREO,
-                  ESTADO, CONFIRMACION, FECHA_CARGA)
+                  GERENTE_MANUAL, ESTADO, CONFIRMACION, FECHA_CARGA)
                  VALUES (:p_camp, :p_user, :p_nombre, :p_tipo, :p_activo, :p_ger, :p_ger_user, :p_ger_mail,
-                         'mantener', 0, :p_now)
+                         :p_manual, 'mantener', 0, :p_now)
         """), {"p_camp": campaign_id, "p_user": row["usuario"], "p_tipo": row["tipo_acceso"],
                "p_nombre": row.get("nombre"),
                "p_activo": None if row.get("activo") is None else int(bool(row["activo"])),
                "p_ger": manager["nombre"] if manager else None,
                "p_ger_user": manager["usuario"] if manager else None,
-               "p_ger_mail": manager["correo"] if manager else None, "p_now": now})
+               "p_ger_mail": manager["correo"] if manager else None, "p_manual": is_manual, "p_now": now})
     # Contactos: solo se AGREGAN gerentes nuevos; no se modifica un contacto existente
     # (sus nombres deben seguir cruzando con los gerentes de las VPN externas).
     for manager in managers.values():
@@ -164,7 +200,7 @@ def load_from_ldap(db, campaign_id=None, replace=False):
     db.commit()
     summary = {"id_campana": campaign_id, "reemplazo": bool(replace), "borrados": deleted,
                "membresias": len(report["filas"]), "gerentes": len(managers),
-               "sin_gerente": without_manager, "reasignadas_confirmadas": reassigned,
+               "sin_gerente": without_manager, "gerente_manual": kept_manual, "reasignadas_confirmadas": reassigned,
                "consulta_utc": report["consulta_utc"]}
     log(f"CARGA FIN | {summary}")
     return summary
@@ -177,7 +213,7 @@ _SELECT = """
            TIPO_ACCESO AS "tipo_acceso", ACTIVO_AD AS "activo_ad", GERENTE AS "gerente",
            GERENTE_USUARIO AS "gerente_usuario", ESTADO AS "estado", OBSERVACION AS "observacion",
            CONFIRMACION AS "confirmacion", CONFIRMADO_POR AS "confirmado_por",
-           FECHA_MODIFICACION AS "fecha_modificacion"
+           FECHA_MODIFICACION AS "fecha_modificacion", GERENTE_MANUAL AS "gerente_manual"
       FROM AUTOM.SOX_C7_VPN_INTERNAS
 """
 
@@ -416,3 +452,117 @@ def confirm_all(db, *, items, user):
         raise
     log(f"CONFIRMACION MASIVA | {user.username} confirmó {len(items)} cuenta(s)")
     return {"confirmadas": len(items)}
+
+
+# ---------------------------------------------------------------- gerente asignado a mano
+
+def campaign_managers(db):
+    """Gerentes que ya tienen cuentas en la campaña activa (para elegirlos al asignar a mano)."""
+    campaign = active_campaign(db)
+    if not campaign:
+        return []
+    return [dict(r) for r in db.execute(text("""
+        SELECT GERENTE_USUARIO AS "usuario", MIN(GERENTE) AS "nombre", MAX(GERENTE_CORREO) AS "correo",
+               COUNT(*) AS "accesos"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS
+         WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL
+         GROUP BY GERENTE_USUARIO ORDER BY MIN(GERENTE)
+    """), {"p_camp": campaign["id"]}).mappings()]
+
+
+def _clean_user(value):
+    value = str(value or "").strip().lower()
+    if not value or len(value) > 100 or any(c.isspace() for c in value) or "@" in value:
+        raise HTTPException(422, "Indica el usuario de red (AD) del gerente, sin espacios ni @")
+    return value
+
+
+def find_ad_manager(usuario):
+    """Busca el usuario en AD para completar nombre y correo (None si LDAP no lo encuentra)."""
+    from services.sox.control_7.ldap_vpn import LDAPAccessError, find_person
+    try:
+        return find_person(_clean_user(usuario))
+    except LDAPAccessError as exc:
+        raise HTTPException(502, str(exc))
+
+
+def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
+    """El administrador asigna un gerente a cuentas SIN gerente en AD (casos especiales).
+
+    Si ese gerente ya tiene cuentas en la campaña, se usan su mismo nombre y correo: las cuentas
+    se suman a él y "Notificación a gerentes" lo muestra una sola vez. Si es nuevo, nombre y correo
+    se toman de AD; si AD no lo tiene, de lo que escribió el administrador.
+    """
+    from services.sox.common.mail_service import EMAIL_RE
+
+    campaign = active_campaign(db)
+    if not campaign:
+        raise HTTPException(409, "No hay una campaña activa")
+    ids = sorted({int(i) for i in item_ids or []})
+    if not ids:
+        raise HTTPException(422, "Selecciona al menos una cuenta")
+    if len(ids) > 2000:
+        raise HTTPException(422, "Demasiadas cuentas en una sola asignación")
+    usuario = _clean_user(usuario)
+
+    existing = db.execute(text("""
+        SELECT MIN(GERENTE) AS "nombre", MAX(GERENTE_CORREO) AS "correo"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS
+         WHERE ID_CAMPANA = :p_camp AND LOWER(GERENTE_USUARIO) = :p_user
+    """), {"p_camp": campaign["id"], "p_user": usuario}).mappings().first()
+    if existing and existing["nombre"]:
+        nombre, correo, origen = existing["nombre"], existing["correo"], "existente"
+    else:
+        try:
+            person = find_ad_manager(usuario)
+        except HTTPException:
+            person = None  # LDAP caído: se usan los datos escritos por el administrador
+        nombre = ((person or {}).get("nombre") or nombre or "").strip()[:200]
+        correo = ((person or {}).get("correo") or correo or "").strip()[:254]
+        origen = "AD" if person else "manual"
+        if not nombre:
+            raise HTTPException(422, "No se encontró el usuario en AD: escribe el nombre del gerente")
+        if not correo or not EMAIL_RE.fullmatch(correo):
+            raise HTTPException(422, "No se encontró el correo en AD: escribe un correo válido del gerente")
+
+    binds = {f"p_{n}": v for n, v in enumerate(ids)}
+    rows = db.execute(text("""
+        SELECT ID AS "id", USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
+               GERENTE_USUARIO AS "gerente_usuario", GERENTE_MANUAL AS "gerente_manual",
+               ESTADO AS "estado", CONFIRMACION AS "confirmacion"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS
+         WHERE ID_CAMPANA = :p_camp AND ID IN (""" + ", ".join(":" + k for k in binds) + """)
+    """), {"p_camp": campaign["id"], **binds}).mappings().all()
+    if len(rows) != len(ids):
+        raise HTTPException(404, "Alguna cuenta no pertenece a la campaña activa")
+    blocked = [r["usuario"] for r in rows if r["gerente_usuario"] and r["gerente_manual"] != 1]
+    if blocked:
+        raise HTTPException(409, "Estas cuentas ya tienen gerente en AD: " + ", ".join(blocked[:10]))
+    confirmed = [r["usuario"] for r in rows if r["confirmacion"] == 1]
+    if confirmed:
+        raise HTTPException(409, "Estas cuentas ya fueron confirmadas: " + ", ".join(confirmed[:10]))
+
+    now = datetime.utcnow()
+    try:
+        for r in rows:
+            db.execute(text("""
+                UPDATE AUTOM.SOX_C7_VPN_INTERNAS
+                   SET GERENTE = :p_ger, GERENTE_USUARIO = :p_user, GERENTE_CORREO = :p_mail, GERENTE_MANUAL = 1
+                 WHERE ID = :p_id
+            """), {"p_ger": nombre, "p_user": usuario, "p_mail": correo, "p_id": r["id"]})
+            before = f", antes {r['gerente']}" if r["gerente"] else ""
+            db.execute(text("""
+                INSERT INTO AUTOM.SOX_C7_VPN_INTERNAS_LOG
+                  (INTERNA_ID, ID_CAMPANA, CUENTA, TIPO_ACCESO, GERENTE, ACCION, ESTADO_ANTERIOR, ESTADO_NUEVO,
+                   OBSERVACION_ANTERIOR, OBSERVACION_NUEVA, USUARIO_SOX, FECHA)
+                VALUES (:p_id, :p_camp, :p_cuenta, :p_tipo, :p_ger, 'ASIGNACION MANUAL DE GERENTE', :p_est, :p_est,
+                        NULL, :p_obs, :p_admin, :p_now)
+            """), {"p_id": r["id"], "p_camp": campaign["id"], "p_cuenta": r["usuario"], "p_tipo": r["tipo_acceso"],
+                   "p_ger": nombre, "p_est": r["estado"], "p_admin": user.username, "p_now": now,
+                   "p_obs": f"Gerente asignado por el administrador: {nombre} ({usuario}){before}"[:1000]})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    log(f"ASIGNACION MANUAL | {user.username} asignó {len(rows)} cuenta(s) a {usuario} ({origen})")
+    return {"asignadas": len(rows), "gerente": nombre, "usuario": usuario, "correo": correo, "origen": origen}
