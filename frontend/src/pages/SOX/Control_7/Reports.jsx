@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 
-export default function Reports() {
+// Las exportaciones de VPN internas se registran con "VPN internas" en el módulo.
+const isInternal = (item) => String(item?.module || "").includes("VPN internas");
+
+/** Historial de exportaciones. internal=true muestra solo las de VPN internas; si no, solo las de externas. */
+export default function Reports({ internal = false }) {
   const [exportsHistory, setExportsHistory] = useState([]);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("exportsHistory")) || [];
-    setExportsHistory(saved);
-  }, []);
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem("exportsHistory")) || []; } catch { saved = []; }
+    setExportsHistory(saved.filter((item) => isInternal(item) === internal));
+  }, [internal]);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Exportaciones</h1>
+      <h1 className="text-2xl font-bold">{internal ? "Exportaciones · VPN internas" : "Exportaciones"}</h1>
       <p className="mt-1 text-slate-500">
         Historial de archivos descargados por el administrador.
       </p>

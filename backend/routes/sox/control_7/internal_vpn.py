@@ -98,6 +98,12 @@ def internal_history(campaign_id: Optional[int] = Query(None), year: Optional[in
                            tipo=tipo, search=search)
 
 
+@router.get("/campaign/internas/seguimiento")
+def internal_audit_log(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.audit_log(db)
+
+
 class NoticeRequest(BaseModel):
     confirmar: bool = False
     claves: Optional[List[str]] = Field(default=None, max_length=500)  # Vacío = todos los pendientes.

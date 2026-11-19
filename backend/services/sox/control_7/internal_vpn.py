@@ -280,6 +280,20 @@ def history(db, *, campaign_id=None, year=None, manager="", status="", tipo="", 
     """), params))
 
 
+def audit_log(db, limit=5000):
+    """Seguimiento: acciones registradas sobre las validaciones de VPN internas (más recientes primero)."""
+    return _rows(db.execute(text("""
+        SELECT l.ID AS "id", l.FECHA AS "fecha_evento", l.USUARIO_SOX AS "usuario", l.GERENTE AS "gerente",
+               l.CUENTA AS "cuenta", l.TIPO_ACCESO AS "tipo_acceso", l.ACCION AS "accion",
+               l.ESTADO_ANTERIOR AS "estado_anterior", l.ESTADO_NUEVO AS "estado_nuevo",
+               l.OBSERVACION_NUEVA AS "observacion_nueva", c.NOMBRE_CAMPANA AS "campana"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS_LOG l
+          LEFT JOIN AUTOM.CAMPANAS_SOX c ON c.ID_CAMPANA = l.ID_CAMPANA
+         ORDER BY l.FECHA DESC, l.ID DESC
+         FETCH FIRST :p_lim ROWS ONLY
+    """), {"p_lim": limit}))
+
+
 # ---------------------------------------------------------------- decisiones
 
 def _decision(decision, observation):

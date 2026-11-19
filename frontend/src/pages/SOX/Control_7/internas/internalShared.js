@@ -25,6 +25,18 @@ export const INTERNAL_CAMPAIGN_COLUMNS = [
   { header: "Última modificación", value: (i) => date(i.fecha_modificacion), width: 20 },
 ];
 
+export const INTERNAL_AUDIT_COLUMNS = [
+  { header: "Fecha", value: (i) => date(i.fecha_evento), width: 20 },
+  { header: "Usuario", value: (i) => text(i.usuario), width: 18 },
+  { header: "Gerente", value: (i) => text(i.gerente), width: 30 },
+  { header: "Cuenta", value: (i) => text(i.cuenta), width: 18 },
+  { header: "Acceso", value: (i) => text(ACCESS_LABEL[i.tipo_acceso]), width: 14 },
+  { header: "Acción", value: (i) => text(i.accion), width: 24 },
+  { header: "Estado anterior", value: (i) => text(DECISION_LABEL[i.estado_anterior] || i.estado_anterior), width: 16 },
+  { header: "Estado nuevo", value: (i) => text(DECISION_LABEL[i.estado_nuevo] || i.estado_nuevo), width: 16 },
+  { header: "Observación", value: (i) => text(i.observacion_nueva), width: 40 },
+];
+
 export const INTERNAL_HISTORY_COLUMNS = [
   { header: "Campaña", value: (i) => text(i.campaign_name), width: 30 },
   ...INTERNAL_CAMPAIGN_COLUMNS,

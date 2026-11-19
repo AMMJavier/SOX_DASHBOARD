@@ -1,4 +1,4 @@
-import { Database, FileText, Home, LayoutGrid, Shield } from "lucide-react";
+import { Database, Download, FileText, Home, LayoutGrid, ScrollText, Shield } from "lucide-react";
 import VpnScopeSwitch, { INTERNAL_PATH } from "../control_7/VpnScopeSwitch";
 
 /** Opciones del Control 7 en modo "VPN internas" (mismo orden que en externas). */
@@ -12,6 +12,9 @@ function Control7InternalSidebar({ role, pathname }) {
       <p className="px-2 pb-1 pt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Gestión · VPN internas</p>
       {item(`${INTERNAL_PATH}/campana`, Database, "Campañas")}
       {item(`${INTERNAL_PATH}/historico`, FileText, "Histórico")}
+      {item(`${INTERNAL_PATH}/exportaciones`, Download, "Exportaciones")}
+      <p className="px-2 pb-1 pt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Administración</p>
+      {item(`${INTERNAL_PATH}/seguimiento`, ScrollText, "Seguimiento")}
     </>}
   </>;
 }

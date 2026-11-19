@@ -36,6 +36,10 @@ export async function getInternalHistory(params = {}) {
   return (await api.get("/sox/campaign/internas/historial", { params })).data;
 }
 
+export async function getInternalAuditLog() {
+  return (await api.get("/sox/campaign/internas/seguimiento")).data;
+}
+
 // Notificación a gerentes de VPN internas (mismo formato que la de externas).
 export async function getInternalNotifications() {
   return (await api.get("/sox/campaign/internas/notificaciones")).data;
