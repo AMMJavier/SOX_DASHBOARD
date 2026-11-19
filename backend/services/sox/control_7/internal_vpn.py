@@ -184,6 +184,102 @@ def list_admin(db, *, campaign_id=None, search="", gerente="", estado="", tipo="
     return {"campana": campaign, "items": items, "total": int(total or 0), "resumen": resumen, "gerentes": gerentes}
 
 
+def dashboard(db, gerente=""):
+    """KPI de la campaña activa (mismos indicadores que el dashboard de VPN externas)."""
+    campaign = active_campaign(db)
+    if not campaign:
+        return {"campana": None, "kpis": {}, "responsables": [], "gerentes": []}
+    params = {"p_camp": campaign["id"]}
+    extra = ""
+    if gerente:
+        extra = " AND LOWER(GERENTE_USUARIO) = LOWER(:p_ger)"
+        params["p_ger"] = gerente
+    kpis = dict(db.execute(text(f"""
+        SELECT COUNT(*) AS "total", NVL(SUM(CONFIRMACION), 0) AS "confirmed",
+               NVL(SUM(1 - CONFIRMACION), 0) AS "pending",
+               NVL(SUM(CASE WHEN GERENTE_USUARIO IS NULL THEN 1 ELSE 0 END), 0) AS "no_owner",
+               NVL(SUM(CASE WHEN TIPO_ACCESO = 'RDP' THEN 1 ELSE 0 END), 0) AS "rdp",
+               NVL(SUM(CASE WHEN TIPO_ACCESO = 'APLICACIONES' THEN 1 ELSE 0 END), 0) AS "aplicaciones",
+               NVL(SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO = 'eliminar' THEN 1 ELSE 0 END), 0) AS "eliminar"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp{extra}
+    """), params).mappings().first() or {})
+    kpis = {k: int(v or 0) for k, v in kpis.items()}
+    kpis["expired"] = kpis["pending"] if campaign["vencida"] else 0
+    responsables = _rows(db.execute(text(f"""
+        SELECT MIN(GERENTE) AS "manager", GERENTE_USUARIO AS "usuario", COUNT(*) AS "total",
+               SUM(CONFIRMACION) AS "confirmed"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS
+         WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL{extra}
+         GROUP BY GERENTE_USUARIO ORDER BY MIN(GERENTE)
+    """), params))
+    gerentes = _rows(db.execute(text("""
+        SELECT GERENTE_USUARIO AS "usuario", MIN(GERENTE) AS "nombre"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL
+         GROUP BY GERENTE_USUARIO ORDER BY MIN(GERENTE)
+    """), {"p_camp": campaign["id"]}))
+    return {"campana": campaign, "kpis": kpis, "responsables": responsables, "gerentes": gerentes}
+
+
+def campaign_rows(db):
+    """Todas las cuentas de la campaña activa (la pantalla Campaña filtra en el navegador)."""
+    campaign = active_campaign(db)
+    if not campaign:
+        return {"campana": None, "items": []}
+    items = _rows(db.execute(text(_SELECT + """
+        WHERE ID_CAMPANA = :p_camp ORDER BY GERENTE NULLS FIRST, NOMBRE, USUARIO, TIPO_ACCESO
+        FETCH FIRST 20000 ROWS ONLY
+    """), {"p_camp": campaign["id"]}))
+    return {"campana": campaign, "items": items}
+
+
+def history_filters(db):
+    campaigns = _rows(db.execute(text("""
+        SELECT c.ID_CAMPANA AS "id", c.NOMBRE_CAMPANA AS "name", c.ANIO AS "anio", c.ESTADO AS "estado"
+          FROM AUTOM.CAMPANAS_SOX c
+         WHERE EXISTS (SELECT 1 FROM AUTOM.SOX_C7_VPN_INTERNAS i WHERE i.ID_CAMPANA = c.ID_CAMPANA)
+         ORDER BY c.ID_CAMPANA DESC
+    """)))
+    managers = [r[0] for r in db.execute(text("""
+        SELECT DISTINCT GERENTE FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE GERENTE IS NOT NULL ORDER BY GERENTE
+    """))]
+    return {"campaigns": campaigns, "years": sorted({c["anio"] for c in campaigns}, reverse=True), "managers": managers}
+
+
+def history(db, *, campaign_id=None, year=None, manager="", status="", tipo="", search=""):
+    where, params = ["1 = 1"], {}
+    if campaign_id:
+        where.append("i.ID_CAMPANA = :p_camp")
+        params["p_camp"] = campaign_id
+    if year:
+        where.append("c.ANIO = :p_year")
+        params["p_year"] = year
+    if manager:
+        where.append("i.GERENTE = :p_ger")
+        params["p_ger"] = manager
+    if status == "pendiente":
+        where.append("i.CONFIRMACION = 0")
+    elif status in DECISIONS:
+        where.append("i.CONFIRMACION = 1 AND i.ESTADO = :p_est")
+        params["p_est"] = status
+    if tipo in ("RDP", "APLICACIONES"):
+        where.append("i.TIPO_ACCESO = :p_tipo")
+        params["p_tipo"] = tipo
+    if search:
+        where.append("(LOWER(i.USUARIO) LIKE :p_q OR LOWER(i.NOMBRE) LIKE :p_q OR LOWER(i.GERENTE) LIKE :p_q)")
+        params["p_q"] = f"%{search.strip().lower()}%"
+    return _rows(db.execute(text(f"""
+        SELECT i.ID AS "id", c.NOMBRE_CAMPANA AS "campaign_name", c.ESTADO AS "campaign_status",
+               c.FECHA_LIMITE AS "deadline", c.FECHA_FIN AS "closed_at", i.USUARIO AS "usuario",
+               i.NOMBRE AS "nombre", i.TIPO_ACCESO AS "tipo_acceso", i.GERENTE AS "gerente",
+               i.ESTADO AS "estado", i.CONFIRMACION AS "confirmacion", i.OBSERVACION AS "observacion",
+               i.CONFIRMADO_POR AS "confirmado_por", i.FECHA_MODIFICACION AS "fecha_modificacion"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS i JOIN AUTOM.CAMPANAS_SOX c ON c.ID_CAMPANA = i.ID_CAMPANA
+         WHERE {' AND '.join(where)}
+         ORDER BY i.ID_CAMPANA DESC, i.GERENTE, i.NOMBRE, i.USUARIO
+         FETCH FIRST 20000 ROWS ONLY
+    """), params))
+
+
 # ---------------------------------------------------------------- decisiones
 
 def _decision(decision, observation):

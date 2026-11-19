@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Save, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Save } from "lucide-react";
 import { readStoredUser } from "../../../services/authSession";
-import { FIELD, InfoBanner, Panel, PRIMARY, SECONDARY } from "../../../components/SOX/common/ControlUI";
+import { InfoBanner, Panel, PRIMARY, SECONDARY } from "../../../components/SOX/common/ControlUI";
 import {
-  confirmAllInternal, errorText, getInternalAdmin, getMyInternalAccounts, loadInternalFromLdap, saveInternalDecision,
+  confirmAllInternal, errorText, getMyInternalAccounts, saveInternalDecision,
 } from "../../../services/sox/control_7/internalVpnService";
 import { formatDateTime } from "../../../utils/dateTime";
+import InternalDashboard from "./internas/InternalDashboard";
 
 const DECISIONS = ["Mantener", "Eliminar", "No pertenece", "Otro"];
 const LABEL = { mantener: "Mantener", eliminar: "Eliminar", "no pertenece": "No pertenece", otro: "Otro" };
@@ -111,93 +112,7 @@ function ManagerView() {
   </div>;
 }
 
-/** Vista de administración: avance por gerente, filtros y carga desde LDAP. */
-function AdminView() {
-  const [filters, setFilters] = useState({ search: "", gerente: "", estado: "", tipo: "" });
-  const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState(null);
-  const limit = 50;
-
-  const load = useCallback(() => {
-    getInternalAdmin({ ...filters, offset: (page - 1) * limit, limit })
-      .then(setData).catch((e) => setFeedback({ error: true, text: errorText(e, "No se pudo consultar las VPN internas.") }));
-  }, [filters, page]);
-  useEffect(load, [load]);
-
-  async function loadLdap() {
-    if (!window.confirm("¿Volver a leer los grupos LDAP RDP y APLICACIONES para la campaña activa? Las cuentas ya confirmadas conservan su decisión.")) return;
-    setBusy(true); setFeedback(null);
-    try {
-      const r = await loadInternalFromLdap();
-      setFeedback({ error: false, text: `LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin jefe en AD.` });
-      load();
-    } catch (e) { setFeedback({ error: true, text: errorText(e, "No se pudo leer LDAP.") }); }
-    finally { setBusy(false); }
-  }
-
-  const setFilter = (key) => (e) => { setFilters((f) => ({ ...f, [key]: e.target.value })); setPage(1); };
-  const r = data?.resumen || {};
-  const pages = Math.max(1, Math.ceil((data?.total || 0) / limit));
-  const percent = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-  const managers = useMemo(() => data?.gerentes || [], [data]);
-
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="text-2xl font-bold">VPN internas · RDP y Aplicaciones</h1>
-        <p className="mt-1 text-slate-500">Confirmación por gerente de las cuentas en los grupos LDAP del Control 6, en la misma campaña que las VPN externas.</p></div>
-      <button type="button" onClick={loadLdap} disabled={busy || !data?.campana} className={SECONDARY}><RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Leyendo LDAP..." : "Cargar desde LDAP"}</button>
-    </div>
-    {feedback && <InfoBanner caution={feedback.error}>{feedback.text}</InfoBanner>}
-    {data && !data.campana && <InfoBanner caution>No hay una campaña activa. Las VPN internas se cargan al iniciar la campaña en Campañas.</InfoBanner>}
-    {data?.campana && <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[["Accesos", r.total || 0, "text-slate-900"], ["Confirmados", `${r.confirmadas || 0} (${percent(r.confirmadas, r.total)}%)`, "text-emerald-700"],
-          ["Marcados para eliminar", r.eliminar || 0, "text-red-700"], ["Sin jefe en AD", r.sin_gerente || 0, "text-amber-700"]].map(([label, value, tone]) =>
-          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">{label}</p><p className={`mt-1 text-2xl font-bold ${tone}`}>{value}</p></div>)}
-      </div>
-      {r.sin_gerente > 0 && <InfoBanner caution>{r.sin_gerente} acceso(s) no tienen jefe ("manager") en Active Directory: ningún gerente puede confirmarlos. Corrige el jefe en AD y vuelve a "Cargar desde LDAP".</InfoBanner>}
-      <Panel title="Avance por gerente" description={`${data.campana.nombre} · fecha límite ${formatDateTime(data.campana.fecha_limite, { seconds: false })}`}>
-        {managers.length === 0 ? <p className="text-sm text-slate-500">Sin gerentes cargados.</p>
-          : <ul className="grid gap-2 md:grid-cols-2">{managers.map((m) => <li key={m.usuario}>
-              <button type="button" onClick={() => { setFilters((f) => ({ ...f, gerente: m.usuario })); setPage(1); }}
-                className="w-full rounded-xl border border-slate-200 p-3 text-left hover:bg-slate-50">
-                <div className="flex justify-between text-sm"><span className="font-semibold">{m.nombre}</span><span className="text-slate-500">{m.confirmadas}/{m.total}</span></div>
-                <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-500" style={{ width: `${percent(m.confirmadas, m.total)}%` }}/></div>
-              </button></li>)}</ul>}
-      </Panel>
-      <Panel title="Detalle de accesos">
-        <div className="grid gap-3 md:grid-cols-4">
-          <label className="text-xs font-semibold text-slate-600">Buscar<div className="relative"><Search size={15} className="absolute left-3 top-1/2 mt-1 -translate-y-1/2 text-slate-400"/>
-            <input value={filters.search} onChange={setFilter("search")} placeholder="Cuenta, nombre o gerente" className={`${FIELD} pl-9`}/></div></label>
-          <label className="text-xs font-semibold text-slate-600">Gerente<select value={filters.gerente} onChange={setFilter("gerente")} className={FIELD}>
-            <option value="">Todos</option><option value="__sin__">Sin jefe en AD</option>{managers.map((m) => <option key={m.usuario} value={m.usuario}>{m.nombre}</option>)}</select></label>
-          <label className="text-xs font-semibold text-slate-600">Estado<select value={filters.estado} onChange={setFilter("estado")} className={FIELD}>
-            <option value="">Todos</option><option value="pendiente">Pendiente</option><option value="confirmado">Confirmado</option>
-            <option value="mantener">Mantener</option><option value="eliminar">Eliminar</option><option value="no pertenece">No pertenece</option><option value="otro">Otro</option></select></label>
-          <label className="text-xs font-semibold text-slate-600">Acceso<select value={filters.tipo} onChange={setFilter("tipo")} className={FIELD}>
-            <option value="">Todos</option><option value="RDP">RDP</option><option value="APLICACIONES">Aplicaciones</option></select></label>
-        </div>
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
-          <th className="p-3">Cuenta</th><th className="p-3">Nombre</th><th className="p-3">Acceso</th><th className="p-3">Gerente (AD)</th><th className="p-3">Decisión</th><th className="p-3">Confirmó</th>
-        </tr></thead><tbody>{(data.items || []).map((x) => <tr key={x.id} className="border-t border-slate-100 align-top">
-          <td className="p-3 font-semibold">{x.usuario}</td>
-          <td className="p-3">{x.nombre || "—"}{x.activo_ad === 0 && <p className="text-xs text-red-600">Deshabilitada en AD</p>}</td>
-          <td className="p-3">{accessBadge(x.tipo_acceso)}</td>
-          <td className="p-3">{x.gerente || <span className="font-semibold text-amber-700">Sin jefe en AD</span>}</td>
-          <td className="p-3">{x.confirmacion ? <span className={`font-semibold ${x.estado === "eliminar" ? "text-red-700" : "text-emerald-700"}`}>{LABEL[x.estado]}</span> : <span className="font-semibold text-amber-700">Pendiente</span>}
-            {x.observacion && <p className="text-xs text-slate-500">{x.observacion}</p>}</td>
-          <td className="p-3 text-xs text-slate-500">{x.confirmado_por ? `${x.confirmado_por} · ${formatDateTime(x.fecha_modificacion, { seconds: false })}` : "—"}</td>
-        </tr>)}</tbody></table></div>
-        <p className="mt-3 text-xs text-slate-500">{data.total} acceso(s) con los filtros aplicados.</p>
-        <Pager page={page} pages={pages} onPage={setPage}/>
-      </Panel>
-    </>}
-  </div>;
-}
-
 export default function InternalVpns() {
   const role = String(readStoredUser()?.rol || "").toLowerCase();
-  return ["administrador", "desarrollador"].includes(role) ? <AdminView/> : <ManagerView/>;
+  return ["administrador", "desarrollador"].includes(role) ? <InternalDashboard/> : <ManagerView/>;
 }

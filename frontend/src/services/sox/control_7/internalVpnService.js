@@ -20,6 +20,22 @@ export async function getInternalAdmin(params = {}) {
   return (await api.get("/sox/campaign/internas", { params })).data;
 }
 
+export async function getInternalDashboard(gerente = "") {
+  return (await api.get("/sox/campaign/internas/dashboard", { params: { gerente } })).data;
+}
+
+export async function getInternalCampaignRows() {
+  return (await api.get("/sox/campaign/internas/todas")).data;
+}
+
+export async function getInternalHistoryFilters() {
+  return (await api.get("/sox/campaign/internas/historial/filtros")).data;
+}
+
+export async function getInternalHistory(params = {}) {
+  return (await api.get("/sox/campaign/internas/historial", { params })).data;
+}
+
 export async function loadInternalFromLdap() {
   return (await api.post("/sox/campaign/internas/cargar")).data;
 }

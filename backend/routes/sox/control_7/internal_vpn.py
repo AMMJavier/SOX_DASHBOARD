@@ -68,6 +68,35 @@ def list_internal(search: str = Query("", max_length=100), gerente: str = Query(
                               tipo=tipo, offset=offset, limit=limit)
 
 
+@router.get("/campaign/internas/dashboard")
+def internal_dashboard(gerente: str = Query("", max_length=100), db: Session = Depends(get_oracle_db),
+                       current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.dashboard(db, gerente)
+
+
+@router.get("/campaign/internas/todas")
+def internal_campaign_rows(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.campaign_rows(db)
+
+
+@router.get("/campaign/internas/historial/filtros")
+def internal_history_filters(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.history_filters(db)
+
+
+@router.get("/campaign/internas/historial")
+def internal_history(campaign_id: Optional[int] = Query(None), year: Optional[int] = Query(None),
+                     manager: str = Query("", max_length=200), status: str = Query("", max_length=20),
+                     tipo: str = Query("", max_length=20), search: str = Query("", max_length=100),
+                     db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    _admin(current)
+    return service.history(db, campaign_id=campaign_id, year=year, manager=manager, status=status,
+                           tipo=tipo, search=search)
+
+
 @router.post("/campaign/internas/cargar")
 async def load_internal(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
     """Vuelve a tomar la foto LDAP de la campaña activa (conserva las decisiones ya confirmadas)."""

@@ -21,6 +21,8 @@ import Exceptions from "../pages/SOX/Control_7/Exceptions";
 import AuditLogs from "../pages/SOX/Control_7/AuditLogs";
 import UnparametrizedVpnsPage from "../pages/SOX/Control_7/UnparametrizedVpnsPage";
 import InternalVpns from "../pages/SOX/Control_7/InternalVpns";
+import InternalCampaign from "../pages/SOX/Control_7/internas/InternalCampaign";
+import InternalHistory from "../pages/SOX/Control_7/internas/InternalHistory";
 
 // Configuración SOX
 import Users from "../pages/Admin/Users";
@@ -205,6 +207,14 @@ export const soxRoutes = (
       <Route
         path="internas"
         element={<InternalVpns />}
+      />
+      <Route
+        path="internas/campana"
+        element={<PrivateRoute allowedRoles={["administrador", "desarrollador"]}><InternalCampaign /></PrivateRoute>}
+      />
+      <Route
+        path="internas/historico"
+        element={<PrivateRoute allowedRoles={["administrador", "desarrollador"]}><InternalHistory /></PrivateRoute>}
       />
     </Route>
 

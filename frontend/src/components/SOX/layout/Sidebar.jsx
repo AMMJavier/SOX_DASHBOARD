@@ -1,5 +1,20 @@
-import { Home, LayoutGrid, Network, Shield } from "lucide-react";
+import { Database, FileText, Home, LayoutGrid, Shield } from "lucide-react";
 import VpnScopeSwitch, { INTERNAL_PATH } from "../control_7/VpnScopeSwitch";
+
+/** Opciones del Control 7 en modo "VPN internas" (mismo orden que en externas). */
+function Control7InternalSidebar({ role, pathname }) {
+  const current = pathname.toLowerCase().replace(/\/$/, "");
+  const item = (path, icon, label) => <SidebarItem key={path} to={path} icon={icon} label={label} active={current === path.toLowerCase()}/>;
+  const admin = ["administrador", "desarrollador"].includes(role);
+  return <>
+    {item(INTERNAL_PATH, Home, "Dashboard")}
+    {admin && <>
+      <p className="px-2 pb-1 pt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Gestión · VPN internas</p>
+      {item(`${INTERNAL_PATH}/campana`, Database, "Campañas")}
+      {item(`${INTERNAL_PATH}/historico`, FileText, "Histórico")}
+    </>}
+  </>;
+}
 import { useLocation } from "react-router-dom";
 import controlConfig from "../../../constants/controlConfig";
 import { readStoredUser } from "../../../services/authSession";
@@ -26,7 +41,7 @@ export default function Sidebar() {
         {role !== "gerencial" && <SidebarItem to="/modules" icon={LayoutGrid} label="Portal de módulos" active={pathname === "/modules"}/>}
         {id === "7" && <VpnScopeSwitch internal={internal}/>}
         {internal
-          ? <SidebarItem to={INTERNAL_PATH} icon={Network} label="VPN internas" active/>
+          ? <Control7InternalSidebar role={role} pathname={pathname}/>
           : <>
             {!documental && <SidebarItem to={dashboard} icon={Home} label="Dashboard"
               active={pathname.toLowerCase() === dashboard.toLowerCase()}/>}
