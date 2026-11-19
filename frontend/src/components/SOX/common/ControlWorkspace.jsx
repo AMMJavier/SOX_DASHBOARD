@@ -188,6 +188,17 @@ export default function ControlWorkspace({ config }) {
   const repositoryChoices = [...planChoice, ...evidenceRows.filter((e) => !e.codigo).map((e) => ({
     id: e.id, nombre: e.nombre_archivo, bytes: e.bytes, origen: `${typeName(e)} · ${e.estado}` }))];
 
+  // Control 1: sin notificación, correo formal debajo del repositorio y sin "Correos enviados desde SOX".
+  const isControl1 = config.number === 1;
+  const mailPanel = MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
+    evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
+    showSent={!isControl1}
+    repositoryFiles={[
+      ...planChoice,
+      ...evidences.map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
+        origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` })),
+    ]}/>;
+
   async function verifyEvidence(id) {
     if (!window.confirm("¿Confirmas que revisaste este documento? Esto NO equivale a la aprobación formal de Gerencia.")) return;
     try { await verifyControlEvidence(config.number, id); setRefreshRecords((n) => n + 1); }
@@ -272,18 +283,13 @@ export default function ControlWorkspace({ config }) {
       </InfoBanner>}
       {/* Correos (notificación y correo formal) arriba del repositorio. La notificación sale
           sin adjuntos salvo los que el administrador marque aquí. */}
-      {NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
+      {/* Control 1: sin panel de notificación; primero el repositorio y después el correo formal. */}
+      {!isControl1 && NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
         title={`Enviar notificación del Control ${config.number}`}
         description="Notificación a los responsables del control. Destinatarios, copias y texto se configuran en backend/config/correos.json; revisa la vista previa antes de enviar. No se adjunta ningún archivo salvo los que elijas."
         sendLabel="Enviar notificación" hideIfNotAdmin onSent={() => setRefreshRecords((n) => n + 1)}
         repositoryFiles={repositoryChoices}/>}
-      {MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
-        evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
-        repositoryFiles={[
-          ...planChoice,
-          ...evidences.map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
-            origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` })),
-        ]}/>}
+      {!isControl1 && mailPanel}
       <Panel title="Repositorio de evidencias" description="Documentación almacenada en el servidor, con su versión, autor y estado de revisión.">
         {usesCodes && canWrite && <div className="mb-4 flex flex-wrap items-center gap-3">
           <button type="button" onClick={searchReplies} disabled={replyBusy} className={SECONDARY}><RefreshCw size={16} className={replyBusy ? "animate-spin" : ""}/>{replyBusy ? "Buscando..." : "Buscar respuestas"}</button>
@@ -356,7 +362,8 @@ export default function ControlWorkspace({ config }) {
             </div>}
           </div>}
       </Panel>
-      {canWrite && <Panel title="Cargar evidencia" description="Archivos PDF, EML, MSG, Word, Excel o imágenes; máximo 15 MB por archivo.">
+      {isControl1 && mailPanel}
+      {canWrite && <Panel title={isControl1 ? "Cargar evidencia (solo de ser necesario)" : "Cargar evidencia"} description="Archivos PDF, EML, MSG, Word, Excel o imágenes; máximo 15 MB por archivo.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="text-xs font-semibold text-slate-600">Tipo de evidencia
             <select value={evidenceType} onChange={(e) => setEvidenceType(e.target.value)} className={FIELD}>

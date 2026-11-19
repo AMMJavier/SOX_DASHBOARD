@@ -29,6 +29,7 @@ const renderTemplate = (text, vars) => String(text || "").replace(/\{(\w+)\}/g, 
 export default function ControlMailPanel({
   control, year, semester = null, evidenceTypes, defaultType, canWrite, onArchived, repositoryFiles = [],
   eventId = null, defaultSubject = "", defaultBody = "", templateVars = null,
+  showSent = true, // false oculta "Correos enviados desde SOX" (redundante con el repositorio)
   title = "Enviar correo formal",
   description = "Solicitud de revisión o aprobación a Gerencia/Jefatura desde el buzón corporativo. La copia enviada se guarda automáticamente como evidencia.",
 }) {
@@ -201,7 +202,7 @@ export default function ControlMailPanel({
       {feedback && <div className="mt-4"><InfoBanner caution={feedback.caution}>{feedback.text}</InfoBanner></div>}
     </Panel>
 
-    <Panel title="Correos enviados desde SOX" description={eventId ? `Correos de este evento (#${eventId}) y su archivado en el expediente.` : "Estado del envío y de su archivado como evidencia del período seleccionado."}>
+    {showSent && <Panel title="Correos enviados desde SOX" description={eventId ? `Correos de este evento (#${eventId}) y su archivado en el expediente.` : "Estado del envío y de su archivado como evidencia del período seleccionado."}>
       {items.length === 0
         ? <p className="text-sm text-slate-500">No hay correos ni notificaciones enviados desde SOX en este período.</p>
         : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-100 text-slate-600"><tr>
@@ -228,6 +229,6 @@ export default function ControlMailPanel({
               </div></td>
             </tr>;
           })}</tbody></table></div>}
-    </Panel>
+    </Panel>}
   </div>;
 }
