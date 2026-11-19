@@ -67,7 +67,7 @@ y lo registra en el log.
 | `controles.<n>.calendario.recordatorios` | Días de envío `MM-DD` (se envía ese día o hasta 7 días después si la API estuvo apagada) |
 | `controles.<n>.calendario.fecha_tope` | Fecha límite de evidencias `MM-DD` (anual: una; semestral: una por semestre). Alimenta el indicador "Vencidos" |
 | `controles.<n>.calendario.alerta_dias_antes` | Si el período no tiene evidencia, alerta N días antes de la fecha tope |
-| `controles.<n>.calendario.adjuntar_ultimo` | `{"controles": [2], "tipos": ["plan"]}`: adjunta el último archivo subido |
+| `controles.<n>.calendario.adjuntar_ultimo` | `{"controles": [2], "tipos": ["plan"], "automatico": false}`: solo con `automatico: true` se adjunta el último archivo subido; por defecto la notificación sale sin adjuntos y el administrador los elige al enviar |
 | `controles.<n>.alerta` | Asunto y cuerpo de la alerta de evidencia faltante |
 
 El programador corre dentro de la API (`services/sox/common/reminder_scheduler.py`), revisa cada

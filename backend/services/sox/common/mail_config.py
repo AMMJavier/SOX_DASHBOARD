@@ -163,7 +163,9 @@ def calendar(number) -> dict:
       fecha_tope         fecha límite de evidencias; una por año (control anual) o
                          una por semestre (controles semestrales)
       alerta_dias_antes  si falta evidencia, alerta N días antes de la fecha tope
-      adjuntar_ultimo    {"controles": [2], "tipos": ["plan"]}: adjunta el último archivo subido
+      adjuntar_ultimo    {"controles": [2], "tipos": ["plan"], "automatico": false}: con
+                         automatico=true adjunta solo el último archivo subido; si no, no
+                         se adjunta nada y el administrador elige los archivos al enviar
     """
     data = control(number).get("calendario") or {}
 
@@ -181,6 +183,8 @@ def calendar(number) -> dict:
         attach = {
             "controles": [int(x) for x in _list(attach.get("controles")) if str(x).isdigit()] or [int(number)],
             "tipos": _list(attach.get("tipos")),
+            # Por defecto NO se adjunta solo: el administrador elige los archivos al enviar.
+            "automatico": attach.get("automatico") is True,
         }
     try:
         days = int(data.get("alerta_dias_antes", 0) or 0)

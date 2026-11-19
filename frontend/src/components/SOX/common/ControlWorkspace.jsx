@@ -72,7 +72,8 @@ export default function ControlWorkspace({ config }) {
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState("");
   const [evidencePage, setEvidencePage] = useState(1);
-  useEffect(() => { setEvidencePage(1); }, [year, semester]);
+  const [manualPage, setManualPage] = useState(1);
+  useEffect(() => { setEvidencePage(1); setManualPage(1); }, [year, semester]);
   const [loadError, setLoadError] = useState("");
   const [refreshRecords, setRefreshRecords] = useState(0);
   const currentRole = readStoredUser()?.rol;
@@ -173,6 +174,19 @@ export default function ControlWorkspace({ config }) {
   const currentPage = Math.min(evidencePage, pageCount);
   const pageRows = evidenceRows.slice((currentPage - 1) * EVIDENCE_PAGE_SIZE, currentPage * EVIDENCE_PAGE_SIZE);
   const usesCodes = evidences.some((e) => e.codigo);
+  const typeName = (e) => config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo;
+  // Archivos subidos a mano (sin código de correo ni correo archivado), del más nuevo al más antiguo.
+  // (los correos archivados antes de los códigos se reconocen por su nombre "ControlN_Correo..." / "ControlN_Respuesta...").
+  const manualRows = evidenceRows.filter((e) => !e.codigo && !e.correo_id
+    && !/^Control\d+_(Correo|Respuesta)/i.test(e.nombre_archivo || ""));
+  const manualPageCount = Math.max(1, Math.ceil(manualRows.length / EVIDENCE_PAGE_SIZE));
+  const manualCurrent = Math.min(manualPage, manualPageCount);
+  const manualPageRows = manualRows.slice((manualCurrent - 1) * EVIDENCE_PAGE_SIZE, manualCurrent * EVIDENCE_PAGE_SIZE);
+  // Plan del Control 2 como opción para el Control 3 (no se adjunta solo: hay que marcarlo).
+  const planChoice = config.number === 3 && planReference
+    ? [{ id: planReference.id, nombre: planReference.nombre_archivo, origen: "Plan de Seguridad verificado · Control 2" }] : [];
+  const repositoryChoices = [...planChoice, ...evidenceRows.filter((e) => !e.codigo).map((e) => ({
+    id: e.id, nombre: e.nombre_archivo, bytes: e.bytes, origen: `${typeName(e)} · ${e.estado}` }))];
 
   async function verifyEvidence(id) {
     if (!window.confirm("¿Confirmas que revisaste este documento? Esto NO equivale a la aprobación formal de Gerencia.")) return;
@@ -198,7 +212,6 @@ export default function ControlWorkspace({ config }) {
       <CalendarDays size={16}/><strong>Fecha tope de evidencias:</strong> {deadlineText}
       {calendar.recordatorios?.length > 0 && <span className="text-xs opacity-80">· Recordatorios {calendar.automatico ? "automáticos" : "programados (envío automático desactivado)"}: {calendar.recordatorios.map((d) => d.split("-").reverse().join("/")).join(", ")}</span>}
     </div>}
-    <InfoBanner>Las evidencias se guardan en Oracle (metadatos y auditoría) y en un repositorio privado (archivo). <strong>Verificada</strong> significa revisión interna; no sustituye el correo formal de aprobación corporativa. {calendar?.fecha_tope ? "La fecha tope y los recordatorios se configuran en backend/config/correos.json." : "Fecha tope: sin configurar para este control."}</InfoBanner>
 
     {/* Solo móviles: en escritorio las secciones están en el sidebar SOX. */}
     <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:hidden" aria-label={`Secciones del control ${config.number}`}>
@@ -257,6 +270,20 @@ export default function ControlWorkspace({ config }) {
             <button type="button" className={`${SECONDARY} ml-3 mt-2`} onClick={() => downloadControlEvidence(2, planReference.id, planReference.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar plan</button></>
         : <>Todavía no se encuentra un Plan de Seguridad verificado del Control 2 para {year}. Revísalo antes de cerrar la evidencia del semestre.</>}
       </InfoBanner>}
+      {/* Correos (notificación y correo formal) arriba del repositorio. La notificación sale
+          sin adjuntos salvo los que el administrador marque aquí. */}
+      {NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
+        title={`Enviar notificación del Control ${config.number}`}
+        description="Notificación a los responsables del control. Destinatarios, copias y texto se configuran en backend/config/correos.json; revisa la vista previa antes de enviar. No se adjunta ningún archivo salvo los que elijas."
+        sendLabel="Enviar notificación" hideIfNotAdmin onSent={() => setRefreshRecords((n) => n + 1)}
+        repositoryFiles={repositoryChoices}/>}
+      {MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
+        evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
+        repositoryFiles={[
+          ...planChoice,
+          ...evidences.map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
+            origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` })),
+        ]}/>}
       <Panel title="Repositorio de evidencias" description="Documentación almacenada en el servidor, con su versión, autor y estado de revisión.">
         {usesCodes && canWrite && <div className="mb-4 flex flex-wrap items-center gap-3">
           <button type="button" onClick={searchReplies} disabled={replyBusy} className={SECONDARY}><RefreshCw size={16} className={replyBusy ? "animate-spin" : ""}/>{replyBusy ? "Buscando..." : "Buscar respuestas"}</button>
@@ -358,21 +385,32 @@ export default function ControlWorkspace({ config }) {
           <button type="button" onClick={clearDraft} disabled={saving} className={SECONDARY}><RotateCcw size={16}/>Limpiar</button>
           <button type="button" onClick={submitEvidence} disabled={saving} className={PRIMARY}><Upload size={16}/>{saving ? "Guardando..." : "Guardar evidencias"}</button>
         </div>
+        {/* Archivos ya subidos de forma manual en el período (también aparecen en el repositorio). */}
+        <div className="mt-6 border-t border-slate-200 pt-5">
+          <h4 className="text-sm font-bold text-slate-800">Archivos cargados manualmente ({manualRows.length})</h4>
+          <p className="mb-3 text-xs text-slate-500">Documentos subidos desde el equipo en el período {periodLabel}; no incluye correos enviados desde SOX ni sus respuestas.</p>
+          {manualRows.length === 0
+            ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">Todavía no hay archivos cargados manualmente en este período.</p>
+            : <ul className="space-y-2">{manualPageRows.map((item) => <li key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                <Paperclip size={18} className="shrink-0 text-blue-600"/>
+                <div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold text-slate-800">{item.nombre_archivo}</p>
+                  <p className="text-xs text-slate-500">{typeName(item)}{item.referencia ? ` · ${item.referencia}` : ""} · Subió {item.creado_por} · {formatDateTime(item.creado_en)}</p></div>
+                <span className={item.estado === "VERIFICADA" ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-amber-700"}>{item.estado}</span>
+                <button className={ICON_BUTTON} type="button" title="Descargar" aria-label={`Descargar ${item.nombre_archivo}`}
+                  onClick={() => downloadControlEvidence(config.number, item.id, item.nombre_archivo).catch((e) => setFeedback(e.message))}><Download size={17}/></button>
+                {canVerify && item.estado === "CARGADA" && <button type="button" className={PRIMARY} onClick={() => verifyEvidence(item.id)}>Verificar</button>}
+              </li>)}</ul>}
+          {manualRows.length > EVIDENCE_PAGE_SIZE && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+            <span>Mostrando {(manualCurrent - 1) * EVIDENCE_PAGE_SIZE + 1}–{Math.min(manualCurrent * EVIDENCE_PAGE_SIZE, manualRows.length)} de {manualRows.length} archivos</span>
+            <div className="flex items-center gap-2">
+              <button type="button" className={SECONDARY} disabled={manualCurrent <= 1} onClick={() => setManualPage(manualCurrent - 1)}>Anterior</button>
+              <span className="px-2 font-semibold">Página {manualCurrent} de {manualPageCount}</span>
+              <button type="button" className={SECONDARY} disabled={manualCurrent >= manualPageCount} onClick={() => setManualPage(manualCurrent + 1)}>Siguiente</button>
+            </div>
+          </div>}
+        </div>
       </Panel>}
       {feedback && <InfoBanner caution>{feedback}</InfoBanner>}
-      {NOTIFY_CONTROLS.includes(config.number) && <ControlReminderPanel control={config.number} anio={year} semestre={periodSemester}
-        title={`Enviar notificación del Control ${config.number}`}
-        description="Notificación a los responsables del control. Destinatarios, copias y texto se configuran en backend/config/correos.json; revisa la vista previa antes de enviar."
-        sendLabel="Enviar notificación" hideIfNotAdmin onSent={() => setRefreshRecords((n) => n + 1)}
-        repositoryFiles={evidenceRows.filter((e) => !e.codigo).map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
-          origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` }))} />}
-      {MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
-        evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
-        repositoryFiles={[
-          ...(config.number === 3 && planReference ? [{ id: planReference.id, nombre: planReference.nombre_archivo, origen: "Plan de Seguridad verificado · Control 2" }] : []),
-          ...evidences.map((e) => ({ id: e.id, nombre: e.nombre_archivo, bytes: e.bytes,
-            origen: `${config.evidence.find((t) => t.key === e.tipo)?.label || e.tipo} · ${e.estado}` })),
-        ]}/>}
     </div>)}
 
     {currentView === "historial" && <Panel title="Historial de actividad" description="Registro auditado de cargas, consultas y revisiones; fecha y hora de Ecuador (UTC-5).">
@@ -391,7 +429,9 @@ export default function ControlWorkspace({ config }) {
         <ul className="space-y-3">{config.openItems.map((item, index) => <li className="flex items-start gap-2 text-sm text-slate-700" key={index}><Mail size={17} className="mt-0.5 shrink-0 text-blue-600"/>{item}</li>)}</ul>
       </Panel>
     </div>}
-    {missingFiles && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-labelledby="missing-files-title" onClick={() => setMissingFiles(false)}>
+    {/* Nota informativa al final de la página. */}
+    <InfoBanner>Las evidencias se guardan en Oracle (metadatos y auditoría) y en un repositorio privado (archivo). <strong>Verificada</strong> significa revisión interna; no sustituye el correo formal de aprobación corporativa. {calendar?.fecha_tope ? "La fecha tope y los recordatorios se configuran en backend/config/correos.json." : "Fecha tope: sin configurar para este control."}</InfoBanner>
+    {missingFiles &&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-labelledby="missing-files-title" onClick={() => setMissingFiles(false)}>
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600"><AlertTriangle size={24}/></div>
         <h3 id="missing-files-title" className="text-lg font-semibold text-slate-900">Falta subir evidencia</h3>

@@ -148,10 +148,11 @@ def compose(control, anio, semestre=None, referencia="", *, db=None, kind="notif
             body = mail_config.render(BODY_FRAME, detalle=default_detail, **values)
     subject = " ".join(subject.split())[:mail.MAX_SUBJECT]
 
-    # Adjunto: último archivo subido (p. ej. el plan del Control 2), si el calendario lo pide.
+    # Adjunto automático del último archivo subido: solo si adjuntar_ultimo.automatico=true.
+    # Por defecto la notificación sale sin adjuntos y el administrador elige cuáles enviar.
     attachments, refs = [], []
     spec = mail_config.calendar(control)["adjuntar_ultimo"]
-    if spec:
+    if spec and spec.get("automatico"):
         found = latest_attachment(db, spec)
         if found:
             name, content, ref = found
