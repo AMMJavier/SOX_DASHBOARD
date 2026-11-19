@@ -139,6 +139,14 @@ def internal_managers(db: Session = Depends(get_oracle_db), current: Usuario = D
     return service.campaign_managers(db)
 
 
+@router.get("/campaign/internas/gerentes/buscar-ad")
+async def internal_manager_search(q: str = Query(..., min_length=3, max_length=100),
+                                  current: Usuario = Depends(get_current_user)):
+    """Busca en AD por cuenta o por nombre ("Angel Napa", "anapao") para asignar un gerente."""
+    _admin(current)
+    return await run_in_threadpool(service.search_ad_managers, q)
+
+
 @router.get("/campaign/internas/gerentes/ad/{usuario}")
 async def internal_manager_lookup(usuario: str, current: Usuario = Depends(get_current_user)):
     """Busca un usuario en AD para completar el nombre y el correo del gerente."""

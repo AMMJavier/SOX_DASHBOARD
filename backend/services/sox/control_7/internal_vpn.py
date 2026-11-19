@@ -486,6 +486,18 @@ def find_ad_manager(usuario):
         raise HTTPException(502, str(exc))
 
 
+def search_ad_managers(query):
+    """Personas activas de AD cuya cuenta o nombre coincide con lo escrito (máx. 20)."""
+    from services.sox.control_7.ldap_vpn import LDAPAccessError, search_people
+    query = str(query or "").strip()[:100]
+    if len(query) < 3:
+        raise HTTPException(422, "Escribe al menos 3 letras de la cuenta o del nombre")
+    try:
+        return search_people(query)
+    except LDAPAccessError as exc:
+        raise HTTPException(502, str(exc))
+
+
 def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
     """El administrador asigna un gerente a cuentas SIN gerente en AD (casos especiales).
 

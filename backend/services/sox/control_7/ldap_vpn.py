@@ -364,3 +364,58 @@ def find_person(username):
                 conn.unbind()
             except Exception:
                 pass
+
+
+SEARCH_LIMIT = 20
+
+
+def search_people(query, limit=SEARCH_LIMIT):
+    """Busca personas ACTIVAS en AD por cuenta (sAMAccountName) o por nombre (displayName).
+
+    "Angel Napa" encuentra "COM Angel Napa": cada palabra debe estar en el nombre.
+    Devuelve hasta `limit` personas {usuario, nombre, correo, cargo, departamento}.
+    """
+    words = [w for w in str(query or "").strip().split() if w][:5]
+    if not words or len(" ".join(words)) < 3:
+        return []
+    by_name = "".join("(displayName=*" + escape_filter_chars(w) + "*)" for w in words)
+    by_account = "(sAMAccountName=" + escape_filter_chars(words[0]) + "*)" if len(words) == 1 else ""
+    search_filter = ("(&(objectCategory=person)(objectClass=user)"
+                     "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
+                     "(|" + by_account + "(&" + by_name + ")))")
+    conn = None
+    found = []
+    try:
+        conn, base = _open_connection()
+        rows = conn.extend.standard.paged_search(
+            search_base=base, search_filter=search_filter, search_scope=SUBTREE,
+            attributes=["sAMAccountName", "displayName", "mail", "title", "department"],
+            paged_size=limit + 5, generator=True)
+        for item in rows:
+            if item.get("type") != "searchResEntry":
+                continue
+            attrs = item.get("attributes") or {}
+            username = str(_first(attrs.get("sAMAccountName")) or "").strip().lower()
+            if not username:
+                continue
+            found.append({"usuario": username[:100],
+                          "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
+                          "correo": str(_first(attrs.get("mail")) or "").strip() or None,
+                          "cargo": str(_first(attrs.get("title")) or "").strip(),
+                          "departamento": str(_first(attrs.get("department")) or "").strip()})
+            if len(found) >= limit:
+                break
+    except LDAPAccessError:
+        raise
+    except Exception as exc:
+        logger.warning("Control 7 internas: búsqueda LDAP de personas fallida (%s)", type(exc).__name__)
+        raise LDAPAccessError("No se pudo buscar en LDAP") from exc
+    finally:
+        if conn is not None:
+            try:
+                conn.unbind()
+            except Exception:
+                pass
+    plain = " ".join(words).lower()
+    # Primero la cuenta exacta, luego los que empiezan igual, luego por nombre.
+    return sorted(found, key=lambda p: (p["usuario"] != plain, not p["usuario"].startswith(plain), p["nombre"].lower()))

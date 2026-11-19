@@ -62,6 +62,11 @@ export async function lookupInternalManager(usuario) {
   return (await api.get(`/sox/campaign/internas/gerentes/ad/${encodeURIComponent(usuario)}`)).data;
 }
 
+// Búsqueda en AD por cuenta o por nombre.
+export async function searchInternalManagersAd(q) {
+  return (await api.get("/sox/campaign/internas/gerentes/buscar-ad", { params: { q } })).data;
+}
+
 export async function assignInternalManager({ ids, usuario, nombre = null, correo = null }) {
   return (await api.post("/sox/campaign/internas/asignar-gerente", { ids, usuario, nombre, correo })).data;
 }
