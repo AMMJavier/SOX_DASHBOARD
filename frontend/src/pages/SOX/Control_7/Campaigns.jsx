@@ -9,7 +9,6 @@ import { CAMPAIGN_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
 import { registerExport } from "../../../utils/sox/control_7/registerExport";
 import { closeActiveCampaign, getCampaignValidations } from "../../../services/sox/control_7/campaignService";
 import CampaignNotifications from "../../../components/SOX/control_7/CampaignNotifications";
-
 export default function Campaigns() {
   const [validations, setValidations] = useState([]);
   const [search, setSearch] = useState("");
@@ -276,7 +275,7 @@ return (
               <th className="border-b p-4">Confirmación</th>
               <th className="border-b p-4">Observación</th>
               <th className="border-b p-4">Fecha VPN</th>
-              <th className="border-b p-4">Vencimiento</th>
+              <th className="border-b p-4">Fecha Vencimiento</th>
               <th className="border-b p-4">Fecha Modificación</th>
             </tr>
           </thead>
@@ -319,9 +318,9 @@ return (
                 </td>
 
                 <td className="border-b p-4">
-                  {
-                  getValidityStatus(item)
-                  }
+                  {/* Igual que Fecha VPN: la hora tal como la guarda Oracle, sin convertir zona. */}
+                  {item.fecha_limite ? String(item.fecha_limite).replace("T", " ").slice(0, 16) : "-"}
+                  {getValidityStatus(item) === "Vencida" && <span className="block text-xs font-bold text-red-600">Vencida</span>}
                 </td>
 
                 <td className="border-b p-4">

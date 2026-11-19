@@ -128,7 +128,8 @@ def get_history_filters():
         cursor.execute("""
             SELECT 
                 ID_CAMPANA,
-                NOMBRE_CAMPANA
+                NOMBRE_CAMPANA,
+                ESTADO
             FROM AUTOM.CAMPANAS_SOX
             ORDER BY ID_CAMPANA DESC
         """)
@@ -136,7 +137,8 @@ def get_history_filters():
         campaigns = [
             {
                 "id": row[0],
-                "name": row[1]
+                "name": row[1],
+                "estado": row[2],
             }
             for row in cursor.fetchall()
         ]

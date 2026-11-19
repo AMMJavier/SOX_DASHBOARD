@@ -44,7 +44,13 @@ export default function InternalDashboard() {
         <Kpi title="Confirmados" value={k.confirmed || 0} color="bg-green-600" icon={CheckCircle}/>
         <Kpi title="Pendientes" value={k.pending || 0} color="bg-amber-500" icon={Clock}/>
         <Kpi title="Vencidos" value={k.expired || 0} color="bg-red-600" icon={AlertTriangle}/>
-        <Kpi title="RDP / Aplicaciones" value={`${k.rdp || 0}/${k.aplicaciones || 0}`} color="bg-indigo-600" icon={Network}/>
+        {/* Mismo cuadro, un tipo de acceso por línea para que no se confundan. */}
+        <Kpi title="RDP y Aplicaciones" color="bg-indigo-600" icon={Network}>
+          <div className="mt-2 space-y-1">
+            <div className="flex items-baseline justify-between gap-3"><span className="text-sm font-semibold text-slate-600">RDP</span><span className="text-2xl font-bold">{k.rdp || 0}</span></div>
+            <div className="flex items-baseline justify-between gap-3 border-t border-slate-100 pt-1"><span className="text-sm font-semibold text-slate-600">Aplicaciones</span><span className="text-2xl font-bold">{k.aplicaciones || 0}</span></div>
+          </div>
+        </Kpi>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -91,12 +97,12 @@ export default function InternalDashboard() {
   );
 }
 
-function Kpi({ title, value, color, icon: Icon }) {
+function Kpi({ title, value, color, icon: Icon, children }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-full ${color}`}><Icon size={30} className="text-white"/></div>
       <p className="text-sm font-bold text-slate-700">{title}</p>
-      <h2 className="mt-2 text-3xl font-bold">{value}</h2>
+      {children || <h2 className="mt-2 text-3xl font-bold">{value}</h2>}
     </div>
   );
 }

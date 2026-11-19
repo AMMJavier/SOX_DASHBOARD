@@ -27,8 +27,9 @@ def insert_checkpoint_source(connection, registros):
 
                 destino.NOMBRE_VPN = origen.NOMBRE_VPN,
                 destino.COMENTARIO = origen.COMENTARIO,
-                destino.COLOR = origen.COLOR,
-                destino.FECHA_ALMACENADO = origen.FECHA_ALMACENADO
+                destino.COLOR = origen.COLOR
+                -- FECHA_ALMACENADO (Fecha VPN) NO se actualiza: queda la del inicio de la
+                -- campaña (o la del día en que apareció la VPN). "Actualizar campaña" no la cambia.
 
 
         WHEN NOT MATCHED THEN

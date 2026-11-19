@@ -23,6 +23,7 @@ export default function History() {
     managers: [],
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [loaded, setLoaded] = useState(false);
   const rowsPerPage = 80;
 
   const months = [
@@ -42,18 +43,30 @@ export default function History() {
 
   const statuses = ["Mantener", "Eliminar", "No pertenece", "Otro"];
 
+  // Al abrir: se elige la campaña cerrada más reciente y se muestran sus registros
+  // (el dato más actual), sin tener que presionar Buscar.
   useEffect(() => {
     async function loadFilters() {
       const data = await getHistoryFilters();
       setFilterOptions(data);
+      // Vienen de la más nueva a la más vieja; la ACTIVA aún no tiene histórico.
+      const latest = (data?.campaigns || []).find((c) => c.estado !== "ACTIVA")?.id;
+      if (latest !== undefined && latest !== null) {
+        setSelectedCampaign(String(latest));
+        await handleSearchHistory({ campaign: String(latest) });
+      } else {
+        await handleSearchHistory();
+      }
     }
 
-    loadFilters();
+    loadFilters().catch((error) => console.error("Error cargando el histórico:", error))
+      .finally(() => setLoaded(true));
   }, []);
 
-  const handleSearchHistory = async () => {
+  const handleSearchHistory = async ({ campaign } = {}) => {
+    const campaignId = campaign ?? selectedCampaign;
     const filters = {
-      campaign_id: selectedCampaign || undefined,
+      campaign_id: campaignId || undefined,
       year: selectedYear || undefined,
       month: selectedMonth || undefined,
       manager: selectedManager || undefined,
@@ -133,7 +146,7 @@ const paginatedHistory = filteredHistory.slice(
             </div>
 
             <button
-              onClick={handleSearchHistory}
+              onClick={() => handleSearchHistory()}
               className="h-11 rounded-lg bg-blue-600 px-6 text-sm font-bold text-white hover:bg-blue-700"
             >
               Buscar
@@ -303,7 +316,7 @@ const paginatedHistory = filteredHistory.slice(
           />
         {filteredHistory.length === 0 && (
           <div className="p-8 text-center text-slate-500">
-            Seleccione filtros y presione Buscar para consultar el histórico.
+            {loaded ? "No hay registros históricos para los filtros seleccionados." : "Cargando el histórico más reciente..."}
           </div>
         )}
       </div>

@@ -16,7 +16,7 @@ const NOTIFICATION = {
   PENDIENTE: { label: "Sin confirmar (revisar buzón)", className: "text-amber-700" },
   FALLIDO: { label: "Fallido", className: "text-red-700" },
 };
-// Gerentes por página en "Ver detalle por gerente".
+// Gerentes por página en "Ver detalles gerentes - envío individual".
 const PAGE_SIZE = 10;
 const errorText = (e) => e?.response?.data?.detail || e?.message || "Error inesperado";
 
@@ -44,6 +44,7 @@ export default function CampaignNotifications({
   const [message, setMessage] = useState(null);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [managerFilter, setManagerFilter] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,6 +66,9 @@ export default function CampaignNotifications({
 
   const summary = data?.resumen;
   const pending = (data?.gerentes || []).filter((x) => x.enviable);
+  // Filtro por gerente del detalle (si el gerente ya no está tras actualizar, se muestran todos).
+  const filtered = (data?.gerentes || []).filter((g) => g.clave === managerFilter);
+  const shownManagers = managerFilter && filtered.length ? filtered : (data?.gerentes || []);
 
   async function send(claves = null) {
     const total = claves ? claves.length : pending.length;
@@ -113,14 +117,20 @@ export default function CampaignNotifications({
 
       {data?.gerentes?.length > 0 && <div className="mt-4">
         <button type="button" onClick={() => setOpen((v) => !v)} className="text-sm font-semibold text-blue-700 hover:underline">
-          {open ? "Ocultar detalle por gerente" : "Ver detalle por gerente"}
+          {open ? "Ocultar detalles gerentes - envío individual" : "Ver detalles gerentes - envío individual"}
         </button>
+        {open && <select value={managerFilter} onChange={(e) => { setManagerFilter(e.target.value); setPage(1); }}
+          className="mt-3 block h-11 w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <option value="">Todos los gerentes ({data.gerentes.length})</option>
+          {[...data.gerentes].sort((a, b) => String(a.gerente).localeCompare(String(b.gerente)))
+            .map((g) => <option key={g.clave} value={g.clave}>{g.gerente}</option>)}
+        </select>}
         {open && <div className="mt-3 overflow-x-auto"><table className="w-full border-collapse text-sm">
           <thead><tr className="bg-slate-50 text-left">
             <th className="border-b p-3">Gerente</th><th className="border-b p-3">{itemLabel} (pendientes)</th><th className="border-b p-3">Correo</th>
             <th className="border-b p-3">Contacto</th><th className="border-b p-3">Aviso</th><th className="border-b p-3">Acción</th>
           </tr></thead>
-          <tbody>{data.gerentes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((g) => {
+          <tbody>{shownManagers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((g) => {
             const contact = CONTACT[g.contacto] || { label: g.contacto, className: "" };
             const notice = NOTIFICATION[g.notificacion];
             return <tr key={g.clave}>
@@ -138,7 +148,7 @@ export default function CampaignNotifications({
             </tr>;
           })}</tbody>
         </table>
-          <Pagination currentPage={page} totalPages={Math.ceil(data.gerentes.length / PAGE_SIZE)} onPageChange={setPage}/>
+          <Pagination currentPage={page} totalPages={Math.ceil(shownManagers.length / PAGE_SIZE)} onPageChange={setPage}/>
         </div>}
       </div>}
     </div>

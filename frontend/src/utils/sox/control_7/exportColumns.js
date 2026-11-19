@@ -16,7 +16,7 @@ export const CAMPAIGN_COLUMNS = [
   { header: "Decisión", value: (i) => text(i.status), width: 14 },
   { header: "Confirmado", value: (i) => (i.confirmed === 1 ? "Sí" : "No"), width: 12 },
   { header: "Observación", value: (i) => text(i.observation), width: 44 },
-  { header: "Fecha límite", value: (i) => date(i.fecha_limite), width: 20 },
+  { header: "Fecha vencimiento", value: (i) => date(i.fecha_limite), width: 20 },
   { header: "Última modificación", value: (i) => date(i.fecha_modificacion), width: 20 },
 ];
 

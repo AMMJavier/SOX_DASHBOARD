@@ -415,7 +415,9 @@ def start_campaign():
                 :semestre,
                 SYSDATE,
                 TO_DATE(:fecha_fin,'DD-MM-YYYY'),
-                SYSDATE + 14,
+                -- Fecha de vencimiento: 15 días calendario desde el inicio. Solo se fija aquí;
+                -- "Actualizar campaña" (/campaign/sync) no la cambia.
+                SYSDATE + 15,
                 'ACTIVA'
             )
         """,
@@ -750,8 +752,10 @@ def get_campaign_validations(
             OBSERVACION,
             CONFIRMACION,
             FECHA_ALMACENADO,
-            FECHA_MODIFICACION, 
-            FECHA_LIMITE
+            FECHA_MODIFICACION,
+            -- Fecha de vencimiento: la de la campaña activa (fijada al iniciarla).
+            NVL(FECHA_LIMITE, (SELECT MAX(c.FECHA_LIMITE) FROM AUTOM.CAMPANAS_SOX c
+                                WHERE c.ESTADO = 'ACTIVA')) AS FECHA_LIMITE
         FROM
         (
             SELECT t.*,
