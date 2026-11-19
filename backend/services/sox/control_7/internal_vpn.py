@@ -54,10 +54,14 @@ def active_campaign(db):
 
 # ---------------------------------------------------------------- carga desde LDAP
 
-def load_from_ldap(db, campaign_id=None):
+def load_from_ldap(db, campaign_id=None, replace=False):
     """Foto LDAP de la campaña activa con el GERENTE de cada cuenta (primer cargo "Gerente"
     en la cadena de jefes de AD). Si el gerente no cambió se conserva la decisión; si cambió,
-    la cuenta vuelve a pendiente para el nuevo gerente y el cambio queda en el seguimiento."""
+    la cuenta vuelve a pendiente para el nuevo gerente y el cambio queda en el seguimiento.
+
+    replace=True BORRA la foto anterior de la campaña (cuentas y su seguimiento) y la vuelve a
+    cargar desde cero. Se usa al iniciar la campaña y con "Reemplazar carga". Primero se lee LDAP:
+    si LDAP falla no se borra nada. No se permite si algún gerente ya confirmó cuentas."""
     from services.sox.control_7.ldap_vpn import LDAPAccessError, read_internal_access_with_managers
 
     campaign = active_campaign(db)
@@ -71,6 +75,20 @@ def load_from_ldap(db, campaign_id=None):
     except LDAPAccessError as exc:
         log(f"CARGA FALLIDA | {exc}")
         raise HTTPException(502, str(exc))
+
+    deleted = 0
+    if replace:
+        confirmed = db.execute(text(
+            "SELECT COUNT(*) FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp AND CONFIRMACION = 1"
+        ), {"p_camp": campaign_id}).scalar() or 0
+        if confirmed:
+            log(f"REEMPLAZO CANCELADO | campaña {campaign_id} | {confirmed} cuenta(s) ya confirmadas por gerentes")
+            raise HTTPException(409, f"No se puede reemplazar la carga: {confirmed} cuenta(s) ya fueron "
+                                     "confirmadas por gerentes. Usa \"Cargar desde LDAP\" para actualizarla.")
+        db.execute(text("DELETE FROM AUTOM.SOX_C7_VPN_INTERNAS_LOG WHERE ID_CAMPANA = :p_camp"), {"p_camp": campaign_id})
+        deleted = db.execute(text("DELETE FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp"),
+                             {"p_camp": campaign_id}).rowcount or 0
+        log(f"REEMPLAZO | campaña {campaign_id} | {deleted} registro(s) anteriores borrados")
 
     now = datetime.utcnow()
     managers = {}
@@ -144,7 +162,8 @@ def load_from_ldap(db, campaign_id=None):
                  VALUES (:p_nombre, :p_correo, :p_user, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {"p_user": manager["usuario"], "p_nombre": manager["nombre"], "p_correo": manager["correo"]})
     db.commit()
-    summary = {"id_campana": campaign_id, "membresias": len(report["filas"]), "gerentes": len(managers),
+    summary = {"id_campana": campaign_id, "reemplazo": bool(replace), "borrados": deleted,
+               "membresias": len(report["filas"]), "gerentes": len(managers),
                "sin_gerente": without_manager, "reasignadas_confirmadas": reassigned,
                "consulta_utc": report["consulta_utc"]}
     log(f"CARGA FIN | {summary}")

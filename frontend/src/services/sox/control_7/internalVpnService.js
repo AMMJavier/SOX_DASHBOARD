@@ -49,8 +49,8 @@ export async function sendInternalNotifications(claves = null) {
   return (await api.post("/sox/campaign/internas/notificaciones/enviar", { confirmar: true, claves })).data;
 }
 
-export async function loadInternalFromLdap() {
-  return (await api.post("/sox/campaign/internas/cargar")).data;
+export async function loadInternalFromLdap(reemplazar = false) {
+  return (await api.post("/sox/campaign/internas/cargar", null, { params: { reemplazar } })).data;
 }
 
 export const errorText = (error, fallback) => error?.response?.data?.detail || error?.message || fallback;

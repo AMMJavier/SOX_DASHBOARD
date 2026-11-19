@@ -8,10 +8,14 @@ anterior, ahí siguen los jefes directos.
 Uso (en el servidor, desde la carpeta backend):
     .venv/bin/python scripts/c7_cargar_gerentes_vpn_internas.py            # solo revisa (no escribe)
     .venv/bin/python scripts/c7_cargar_gerentes_vpn_internas.py --cargar   # lee LDAP y guarda los gerentes
+    .venv/bin/python scripts/c7_cargar_gerentes_vpn_internas.py --reemplazar  # BORRA la carga y la hace de cero
 
 --cargar hace exactamente lo mismo que el botón "Cargar desde LDAP": usa la regla del script
 c7_gerentes_vpn_internas.py (primer cargo "Gerente" en la cadena de jefes de AD). Las cuentas
 cuyo gerente cambia vuelven a pendiente para el nuevo gerente.
+--reemplazar borra todas las cuentas de la campaña activa (y su seguimiento) y las carga de nuevo
+con los gerentes; es lo mismo que pasa al iniciar una campaña. Si algún gerente ya confirmó
+cuentas, no borra nada.
 """
 import argparse
 import os
@@ -52,7 +56,9 @@ def review(db, campaign_id):
 
 def main():
     parser = argparse.ArgumentParser(description="Gerentes de VPN internas guardados en la campaña activa")
-    parser.add_argument("--cargar", action="store_true", help="lee LDAP y guarda los gerentes (igual que el botón)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--cargar", action="store_true", help="lee LDAP y guarda los gerentes (igual que el botón)")
+    group.add_argument("--reemplazar", action="store_true", help="borra la carga de la campaña y la hace de cero")
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -60,9 +66,13 @@ def main():
         campaign = active_campaign(db)
         if not campaign:
             sys.exit("No hay una campaña activa del Control 7")
-        if args.cargar:
+        if args.cargar or args.reemplazar:
             print("Leyendo LDAP y guardando gerentes en la campaña activa...", flush=True)
-            summary = load_from_ldap(db)
+            try:
+                summary = load_from_ldap(db, replace=args.reemplazar)
+            except Exception as exc:
+                db.rollback()
+                sys.exit(f"No se cargó: {getattr(exc, 'detail', None) or exc}")
             print(f"Carga terminada: {summary}")
         review(db, campaign["id"])
     finally:

@@ -450,7 +450,8 @@ def start_campaign():
         from services.sox.control_7.internal_vpn import load_from_ldap
         db_internas = _InternalSession()
         try:
-            internas = load_from_ldap(db_internas)
+            # Campaña nueva: se borra cualquier carga previa y se cargan los GERENTES desde cero.
+            internas = load_from_ldap(db_internas, replace=True)
         except Exception as exc:
             db_internas.rollback()
             detalle = getattr(exc, "detail", None) or str(exc)

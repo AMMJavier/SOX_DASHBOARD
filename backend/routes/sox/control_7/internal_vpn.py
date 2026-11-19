@@ -126,7 +126,12 @@ def internal_notifications_send(payload: NoticeRequest, background: BackgroundTa
 
 
 @router.post("/campaign/internas/cargar")
-async def load_internal(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
-    """Vuelve a tomar la foto LDAP de la campaña activa (conserva las decisiones ya confirmadas)."""
+async def load_internal(reemplazar: bool = Query(False), db: Session = Depends(get_oracle_db),
+                        current: Usuario = Depends(get_current_user)):
+    """Vuelve a tomar la foto LDAP de la campaña activa.
+
+    reemplazar=false: actualiza y conserva las decisiones confirmadas.
+    reemplazar=true: borra la carga anterior y la carga desde cero (solo sin confirmaciones).
+    """
     _admin(current)
-    return await run_in_threadpool(service.load_from_ldap, db)
+    return await run_in_threadpool(service.load_from_ldap, db, None, reemplazar)

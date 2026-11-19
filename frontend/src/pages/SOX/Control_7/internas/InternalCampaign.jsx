@@ -44,12 +44,15 @@ export default function InternalCampaign() {
   const rows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   const resetPage = (setter) => (e) => { setter(e.target.value); setPage(1); };
 
-  async function reloadLdap() {
-    if (!window.confirm("¿Volver a leer los grupos LDAP RDP y APLICACIONES? Las cuentas ya confirmadas conservan su decisión.")) return;
+  async function reloadLdap(replace = false) {
+    const question = replace
+      ? "¿Borrar la carga actual de VPN internas de esta campaña y cargarla de nuevo desde LDAP con los GERENTES? Solo se permite si ningún gerente ha confirmado cuentas."
+      : "¿Volver a leer los grupos LDAP RDP y APLICACIONES? Las cuentas ya confirmadas conservan su decisión.";
+    if (!window.confirm(question)) return;
     setBusy(true); setMessage("");
     try {
-      const r = await loadInternalFromLdap();
-      setMessage(`LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.reasignadas_confirmadas ? `, ${r.reasignadas_confirmadas} confirmada(s) que cambiaron de gerente y volvieron a pendiente` : ""}.`);
+      const r = await loadInternalFromLdap(replace);
+      setMessage(`${r.reemplazo ? `Carga reemplazada: ${r.borrados} registro(s) anteriores borrados. ` : ""}LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.reasignadas_confirmadas ? `, ${r.reasignadas_confirmadas} confirmada(s) que cambiaron de gerente y volvieron a pendiente` : ""}.`);
       load();
     } catch (e) { setMessage(errorText(e, "No se pudo leer LDAP.")); }
     finally { setBusy(false); }
@@ -72,7 +75,10 @@ export default function InternalCampaign() {
               <Search size={18} className="text-slate-500"/>
               <input value={search} onChange={resetPage(setSearch)} className="w-full border-none bg-transparent text-sm outline-none" placeholder="Buscar por cuenta, nombre o gerente..."/>
             </div>
-            <button onClick={reloadLdap} disabled={busy || !data.campana} className="flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60">
+            <button onClick={() => reloadLdap(true)} disabled={busy || !data.campana} title="Borra la carga actual de la campaña y la vuelve a cargar con los gerentes"
+              className="flex h-11 items-center gap-2 rounded-lg border border-red-300 bg-white px-5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
+              <RefreshCw size={16}/>Reemplazar carga</button>
+            <button onClick={() => reloadLdap(false)} disabled={busy || !data.campana} className="flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60">
               <RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Leyendo LDAP..." : "Cargar desde LDAP"}</button>
             <button className="h-11 rounded-lg bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-700" onClick={async () => {
               try {
