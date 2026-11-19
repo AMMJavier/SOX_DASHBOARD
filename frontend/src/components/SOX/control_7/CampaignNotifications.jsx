@@ -3,6 +3,7 @@ import { Mail, RefreshCw, Send } from "lucide-react";
 import { readStoredUser } from "../../../services/authSession";
 import { getCampaignNotifications, sendCampaignNotifications } from "../../../services/sox/control_7/campaignService";
 import { formatDateTime } from "../../../utils/dateTime";
+import Pagination from "../../common/Pagination";
 
 const CONTACT = {
   LISTO: { label: "Correo encontrado", className: "text-emerald-700" },
@@ -15,6 +16,8 @@ const NOTIFICATION = {
   PENDIENTE: { label: "Sin confirmar (revisar buzón)", className: "text-amber-700" },
   FALLIDO: { label: "Fallido", className: "text-red-700" },
 };
+// Gerentes por página en "Ver detalle por gerente".
+const PAGE_SIZE = 10;
 const errorText = (e) => e?.response?.data?.detail || e?.message || "Error inesperado";
 
 function Kpi({ label, value, tone = "text-slate-900" }) {
@@ -39,6 +42,7 @@ export default function CampaignNotifications({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,7 +119,7 @@ export default function CampaignNotifications({
             <th className="border-b p-3">Gerente</th><th className="border-b p-3">{itemLabel} (pendientes)</th><th className="border-b p-3">Correo</th>
             <th className="border-b p-3">Contacto</th><th className="border-b p-3">Aviso</th><th className="border-b p-3">Acción</th>
           </tr></thead>
-          <tbody>{data.gerentes.map((g) => {
+          <tbody>{data.gerentes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((g) => {
             const contact = CONTACT[g.contacto] || { label: g.contacto, className: "" };
             const notice = NOTIFICATION[g.notificacion];
             return <tr key={g.clave}>
@@ -132,7 +136,9 @@ export default function CampaignNotifications({
                 {g.notificacion === "FALLIDO" ? "Reintentar" : "Enviar"}</button>}</td>
             </tr>;
           })}</tbody>
-        </table></div>}
+        </table>
+          <Pagination currentPage={page} totalPages={Math.ceil(data.gerentes.length / PAGE_SIZE)} onPageChange={setPage}/>
+        </div>}
       </div>}
     </div>
   );
