@@ -175,36 +175,80 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
     return accounts
 
 
-def _resolve_manager(conn, dn):
-    """Datos del jefe a partir de su DN (búsqueda BASE). None si no se encuentra."""
+# Control 7: el responsable de una VPN interna es el primer GERENTE de la cadena de jefes
+# de AD (atributo "manager"), no el jefe directo (que puede ser jefe o coordinador).
+MANAGER_TITLE_PREFIX = "gerente"
+MAX_MANAGER_LEVELS = 10
+
+
+def _plain_title(value):
+    import unicodedata
+    value = unicodedata.normalize("NFKD", str(value or "")).strip().lower()
+    return "".join(c for c in value if not unicodedata.combining(c))
+
+
+def _person(conn, dn, people):
+    """Datos de AD de un DN (con caché): usuario, nombre, correo, cargo y DN de su jefe."""
+    if dn in people:
+        return people[dn]
+    person = None
     try:
         conn.search(search_base=dn, search_scope=BASE, search_filter="(objectClass=user)",
-                    attributes=["sAMAccountName", "displayName", "mail"], size_limit=1)
+                    attributes=["sAMAccountName", "displayName", "mail", "title", "department", "manager"], size_limit=1)
+        if len(conn.entries) == 1:
+            attrs = conn.entries[0].entry_attributes_as_dict
+            username = str(_first(attrs.get("sAMAccountName")) or "").strip().lower()
+            if username:
+                person = {"usuario": username[:100],
+                          "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
+                          "correo": (str(_first(attrs.get("mail")) or "").strip() or None),
+                          "cargo": str(_first(attrs.get("title")) or "").strip(),
+                          "departamento": str(_first(attrs.get("department")) or "").strip(),
+                          "manager_dn": str(_first(attrs.get("manager")) or "").strip() or None}
     except Exception:
-        return None
-    if len(conn.entries) != 1:
-        return None
-    attrs = conn.entries[0].entry_attributes_as_dict
-    username = str(_first(attrs.get("sAMAccountName")) or "").strip().lower()
-    if not username:
-        return None
-    return {"usuario": username[:100],
-            "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
-            "correo": (str(_first(attrs.get("mail")) or "").strip() or None)}
+        person = None
+    people[dn] = person
+    return person
+
+
+def _find_manager(conn, dn, people, found):
+    """Sube por la cadena de jefes desde dn hasta el primer cargo que empieza con "Gerente".
+
+    Devuelve {usuario, nombre, correo, cargo, departamento} o None si no hay gerente en la cadena.
+    """
+    if dn in found:
+        return found[dn]
+    path, current, result = [], dn, None
+    while current and len(path) < MAX_MANAGER_LEVELS and current not in path:
+        if current in found:
+            result = found[current]
+            break
+        path.append(current)
+        person = _person(conn, current, people)
+        if not person:
+            break
+        if _plain_title(person["cargo"]).startswith(MANAGER_TITLE_PREFIX):
+            result = {k: person[k] for k in ("usuario", "nombre", "correo", "cargo", "departamento")}
+            break
+        current = person["manager_dn"]
+    for step in path:
+        found[step] = result
+    return result
 
 
 def read_internal_access_with_managers():
-    """Control 7 (VPN internas): membresías RDP/APLICACIONES con el jefe de cada cuenta.
+    """Control 7 (VPN internas): membresías RDP/APLICACIONES con el GERENTE de cada cuenta.
 
     Devuelve una fila por (cuenta, grupo): usuario, nombre, activo, tipo_acceso y
-    gerente {usuario, nombre, correo} o None si AD no tiene "manager" para la cuenta.
+    gerente {usuario, nombre, correo, cargo}: el primer jefe de la cadena de AD cuyo cargo
+    empieza con "Gerente"; None si la cuenta no tiene jefe o no hay gerente en la cadena.
     """
     page_size = _integer("LDAP6_PAGE_SIZE", 200, 20, 1000)
     max_users = _integer("LDAP6_MAX_USERS_PER_GROUP", 5000, 100, 20000)
     conn = None
     try:
         conn, base = _open_connection()
-        rows, managers = [], {}
+        rows, people, found = [], {}, {}
         for access_type, group_name in LDAP_GROUPS.items():
             dn = _group_dn(conn, base, group_name)
             group_users = _direct_users(conn, base, dn, page_size, max_users, with_manager=True)
@@ -212,11 +256,10 @@ def read_internal_access_with_managers():
                 raise LDAPAccessError("El grupo LDAP " + access_type + " no devolvió cuentas")
             for info in group_users.values():
                 manager_dn = info.pop("manager_dn", None)
-                if manager_dn and manager_dn not in managers:
-                    managers[manager_dn] = _resolve_manager(conn, manager_dn)
-                rows.append({**info, "tipo_acceso": access_type,
-                             "gerente": managers.get(manager_dn) if manager_dn else None})
-        return {"filas": rows, "gerentes": len([m for m in managers.values() if m]),
+                manager = _find_manager(conn, manager_dn, people, found) if manager_dn else None
+                rows.append({**info, "tipo_acceso": access_type, "gerente": manager})
+        managers = {m["usuario"] for m in found.values() if m}
+        return {"filas": rows, "gerentes": len(managers),
                 "consulta_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     except LDAPAccessError:
         raise

@@ -41,7 +41,7 @@ def _admin(user: Usuario):
 
 @router.get("/internas/mine")
 def my_internal_accounts(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
-    """Cuentas con VPN interna a cargo del usuario en sesión (jefe según Active Directory)."""
+    """Cuentas con VPN interna a cargo del usuario en sesión (gerente según la cadena de jefes de Active Directory)."""
     return service.list_for_manager(db, current.username)
 
 

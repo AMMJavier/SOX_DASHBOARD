@@ -49,7 +49,7 @@ export default function InternalCampaign() {
     setBusy(true); setMessage("");
     try {
       const r = await loadInternalFromLdap();
-      setMessage(`LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin jefe en AD.`);
+      setMessage(`LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.reasignadas_confirmadas ? `, ${r.reasignadas_confirmadas} confirmada(s) que cambiaron de gerente y volvieron a pendiente` : ""}.`);
       load();
     } catch (e) { setMessage(errorText(e, "No se pudo leer LDAP.")); }
     finally { setBusy(false); }

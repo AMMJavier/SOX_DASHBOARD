@@ -1,7 +1,7 @@
 """Control 7 - VPN internas (LDAP RDP / APLICACIONES) validadas por el gerente.
 
 Misma campaña semestral que las VPN externas (AUTOM.CAMPANAS_SOX). Al iniciar la campaña
-(o con "Cargar desde LDAP") se toma la foto de los grupos del Control 6 con el jefe de cada
+(o con "Cargar desde LDAP") se toma la foto de los grupos del Control 6 con el GERENTE de cada
 cuenta según Active Directory ("manager"). El gerente solo ve y confirma SUS cuentas: la
 pertenencia se comprueba en el backend con GERENTE_USUARIO = usuario en sesión.
 Tablas: backend/sql/sox_c7_vpn_internas.sql.
@@ -55,7 +55,9 @@ def active_campaign(db):
 # ---------------------------------------------------------------- carga desde LDAP
 
 def load_from_ldap(db, campaign_id=None):
-    """Foto LDAP de la campaña activa. Las cuentas ya confirmadas conservan su decisión y gerente."""
+    """Foto LDAP de la campaña activa con el GERENTE de cada cuenta (primer cargo "Gerente"
+    en la cadena de jefes de AD). Si el gerente no cambió se conserva la decisión; si cambió,
+    la cuenta vuelve a pendiente para el nuevo gerente y el cambio queda en el seguimiento."""
     from services.sox.control_6.ldap_access import LDAPAccessError, read_internal_access_with_managers
 
     campaign = active_campaign(db)
@@ -63,7 +65,7 @@ def load_from_ldap(db, campaign_id=None):
         if not campaign:
             raise HTTPException(409, "No hay una campaña activa para cargar VPN internas")
         campaign_id = campaign["id"]
-    log(f"CARGA INICIO | campaña {campaign_id} | grupos LDAP RDP y APLICACIONES con su jefe (manager)")
+    log(f"CARGA INICIO | campaña {campaign_id} | grupos LDAP RDP y APLICACIONES con su gerente (cadena de jefes de AD)")
     try:
         report = read_internal_access_with_managers()
     except LDAPAccessError as exc:
@@ -73,21 +75,54 @@ def load_from_ldap(db, campaign_id=None):
     now = datetime.utcnow()
     managers = {}
     without_manager = 0
+    reassigned = 0
+    # Estado actual de la campaña: para detectar cambios de gerente.
+    current = {(r["usuario"], r["tipo_acceso"]): r for r in db.execute(text("""
+        SELECT ID AS "id", USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
+               GERENTE_USUARIO AS "gerente_usuario", ESTADO AS "estado", OBSERVACION AS "observacion",
+               CONFIRMACION AS "confirmacion"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
+    """), {"p_camp": campaign_id}).mappings()}
     for row in report["filas"]:
         manager = row.get("gerente")
         if manager:
             managers[manager["usuario"]] = manager
         else:
             without_manager += 1
+        # Cambio de gerente: el nuevo NO hereda la decisión del anterior. Si ya estaba
+        # confirmada, se deja constancia en el seguimiento y vuelve a pendiente.
+        before = current.get((row["usuario"], row["tipo_acceso"]))
+        new_user = (manager or {}).get("usuario")
+        if before and (before["gerente_usuario"] or "").lower() != (new_user or "").lower() and before["confirmacion"] == 1:
+            reassigned += 1
+            note = (f"Cambio de gerente: {before['gerente'] or 'sin gerente'} -> "
+                    f"{(manager or {}).get('nombre') or 'sin gerente'}. La decisión anterior queda en el historial "
+                    "y la cuenta vuelve a pendiente para el nuevo gerente.")
+            db.execute(text("""
+                INSERT INTO AUTOM.SOX_C7_VPN_INTERNAS_LOG
+                  (INTERNA_ID, ID_CAMPANA, CUENTA, TIPO_ACCESO, GERENTE, ACCION, ESTADO_ANTERIOR, ESTADO_NUEVO,
+                   OBSERVACION_ANTERIOR, OBSERVACION_NUEVA, USUARIO_SOX, FECHA)
+                VALUES (:p_id, :p_camp, :p_cuenta, :p_tipo, :p_ger, 'REASIGNACION DE GERENTE', :p_ant, 'pendiente',
+                        :p_obs_ant, :p_obs, 'LDAP', :p_now)
+            """), {"p_id": before["id"], "p_camp": campaign_id, "p_cuenta": row["usuario"],
+                   "p_tipo": row["tipo_acceso"], "p_ger": (manager or {}).get("nombre"), "p_ant": before["estado"],
+                   "p_obs_ant": before["observacion"], "p_obs": note[:1000], "p_now": now})
+        # En Oracle, las expresiones del SET usan los valores ANTERIORES de la fila.
         db.execute(text("""
             MERGE INTO AUTOM.SOX_C7_VPN_INTERNAS d
             USING (SELECT :p_camp ID_CAMPANA, :p_user USUARIO, :p_tipo TIPO_ACCESO FROM dual) s
                ON (d.ID_CAMPANA = s.ID_CAMPANA AND d.USUARIO = s.USUARIO AND d.TIPO_ACCESO = s.TIPO_ACCESO)
             WHEN MATCHED THEN UPDATE SET
                  d.NOMBRE = :p_nombre, d.ACTIVO_AD = :p_activo,
-                 d.GERENTE = CASE WHEN d.CONFIRMACION = 1 THEN d.GERENTE ELSE :p_ger END,
-                 d.GERENTE_USUARIO = CASE WHEN d.CONFIRMACION = 1 THEN d.GERENTE_USUARIO ELSE :p_ger_user END,
-                 d.GERENTE_CORREO = CASE WHEN d.CONFIRMACION = 1 THEN d.GERENTE_CORREO ELSE :p_ger_mail END
+                 d.GERENTE = :p_ger, d.GERENTE_USUARIO = :p_ger_user, d.GERENTE_CORREO = :p_ger_mail,
+                 d.CONFIRMACION = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
+                                       THEN d.CONFIRMACION ELSE 0 END,
+                 d.ESTADO = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
+                                 THEN d.ESTADO ELSE 'mantener' END,
+                 d.OBSERVACION = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
+                                      THEN d.OBSERVACION ELSE NULL END,
+                 d.CONFIRMADO_POR = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
+                                         THEN d.CONFIRMADO_POR ELSE NULL END
             WHEN NOT MATCHED THEN INSERT
                  (ID_CAMPANA, USUARIO, NOMBRE, TIPO_ACCESO, ACTIVO_AD, GERENTE, GERENTE_USUARIO, GERENTE_CORREO,
                   ESTADO, CONFIRMACION, FECHA_CARGA)
@@ -110,7 +145,8 @@ def load_from_ldap(db, campaign_id=None):
         """), {"p_user": manager["usuario"], "p_nombre": manager["nombre"], "p_correo": manager["correo"]})
     db.commit()
     summary = {"id_campana": campaign_id, "membresias": len(report["filas"]), "gerentes": len(managers),
-               "sin_gerente": without_manager, "consulta_utc": report["consulta_utc"]}
+               "sin_gerente": without_manager, "reasignadas_confirmadas": reassigned,
+               "consulta_utc": report["consulta_utc"]}
     log(f"CARGA FIN | {summary}")
     return summary
 

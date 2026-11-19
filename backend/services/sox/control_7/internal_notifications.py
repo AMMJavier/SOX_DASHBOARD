@@ -5,7 +5,7 @@ vista previa, un aviso por gerente (solo se reintenta si falló), modo prueba de
 envío en segundo plano y auditoría en AUTOM.SOX_MAIL_OUTBOX (ORIGEN='CAMPANA').
 
 Diferencias:
-  - Gerentes: AUTOM.SOX_C7_VPN_INTERNAS de la campaña activa (jefe según Active Directory).
+  - Gerentes: AUTOM.SOX_C7_VPN_INTERNAS de la campaña activa (gerente según la cadena de jefes de Active Directory).
   - Correo: el de LDAP guardado en GERENTE_CORREO (sin buscar por nombre: no hay ambigüedad).
   - GERENTE_KEY = "int:<usuario>" y TIPO_EVIDENCIA = 'notificacion_interna': los avisos de
     internas no se mezclan con los de externas aunque sea el mismo gerente.
