@@ -200,6 +200,13 @@ def alert_template(number) -> dict:
     return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
 
 
+def c7_internal_notice() -> dict:
+    """Aviso a gerentes de VPN internas (controles.7.aviso_gerentes_internas). El modo prueba
+    es el mismo de aviso_gerentes. Sin textos, se usan los de internal_notifications.py."""
+    data = control(7).get("aviso_gerentes_internas") or {}
+    return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
+
+
 def c7_notice() -> dict:
     """Aviso de apertura de campaña a gerentes (Control 7)."""
     data = control(7).get("aviso_gerentes") or {}

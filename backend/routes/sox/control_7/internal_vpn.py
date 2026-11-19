@@ -6,14 +6,15 @@ Administrador / desarrollador: listado completo, resumen por gerente y carga des
 """
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from auth.dependencies import get_current_user
 from database.oracle_database import get_oracle_db
 from models import Usuario
+from services.sox.control_7 import internal_notifications as notices
 from services.sox.control_7 import internal_vpn as service
 
 router = APIRouter(tags=["SOX - Control 7 VPN internas"])
@@ -95,6 +96,27 @@ def internal_history(campaign_id: Optional[int] = Query(None), year: Optional[in
     _admin(current)
     return service.history(db, campaign_id=campaign_id, year=year, manager=manager, status=status,
                            tipo=tipo, search=search)
+
+
+class NoticeRequest(BaseModel):
+    confirmar: bool = False
+    claves: Optional[List[str]] = Field(default=None, max_length=500)  # Vacío = todos los pendientes.
+
+
+@router.get("/campaign/internas/notificaciones")
+def internal_notifications_preview(db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    if current.rol != "administrador":
+        raise HTTPException(403, "Solo un administrador SOX puede gestionar las notificaciones")
+    return notices.preview(db)
+
+
+@router.post("/campaign/internas/notificaciones/enviar", status_code=202)
+def internal_notifications_send(payload: NoticeRequest, background: BackgroundTasks,
+                                db: Session = Depends(get_oracle_db), current: Usuario = Depends(get_current_user)):
+    campaign, keys = notices.start_batch(db, current, claves=payload.claves, confirmar=payload.confirmar)
+    background.add_task(notices.run_batch, campaign["id"], keys, current.id, current.username)
+    return {"en_cola": len(keys), "campana": campaign["nombre"],
+            "mensaje": "Envío iniciado en segundo plano. Actualiza la vista para ver el avance."}
 
 
 @router.post("/campaign/internas/cargar")

@@ -24,8 +24,16 @@ function Kpi({ label, value, tone = "text-slate-900" }) {
   </div>;
 }
 
-/** Aviso individual a los gerentes de la campaña activa (solo administración SOX). */
-export default function CampaignNotifications() {
+/**
+ * Aviso individual a los gerentes de la campaña activa (solo administración SOX).
+ * Por defecto: VPN externas. VPN internas pasa sus propias funciones y textos.
+ */
+export default function CampaignNotifications({
+  fetchData = getCampaignNotifications,
+  sendData = sendCampaignNotifications,
+  description = "Aviso individual de apertura a cada gerente con VPN en la campaña activa. El correo no reemplaza la validación en el portal.",
+  itemLabel = "VPN",
+}) {
   const isAdmin = readStoredUser()?.rol === "administrador";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,10 +42,10 @@ export default function CampaignNotifications() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setData(await getCampaignNotifications()); }
+    try { setData(await fetchData()); }
     catch (e) { setMessage({ error: true, text: errorText(e) }); }
     finally { setLoading(false); }
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
   // Mientras hay un envío en segundo plano, refrescar el avance cada 5 segundos.
@@ -55,11 +63,11 @@ export default function CampaignNotifications() {
 
   async function send(claves = null) {
     const total = claves ? claves.length : pending.length;
-    const ok = window.confirm(`Se enviará un correo REAL a ${total} gerente(s) de la campaña "${data.campana.nombre}" con su cantidad de VPN y la fecha límite.\n\nLos gerentes ya notificados no recibirán otro aviso. ¿Confirmas el envío?`);
+    const ok = window.confirm(`Se enviará un correo REAL a ${total} gerente(s) de la campaña "${data.campana.nombre}" con su cantidad de ${itemLabel} y la fecha límite.\n\nLos gerentes ya notificados no recibirán otro aviso. ¿Confirmas el envío?`);
     if (!ok) return;
     setMessage(null);
     try {
-      const result = await sendCampaignNotifications(claves);
+      const result = await sendData(claves);
       setMessage({ error: false, text: `${result.en_cola} aviso(s) en envío. ${result.mensaje}` });
     } catch (e) { setMessage({ error: true, text: errorText(e) }); }
     finally { load(); }
@@ -70,7 +78,7 @@ export default function CampaignNotifications() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-lg font-bold"><Mail size={20} className="text-blue-600"/>Notificación a gerentes</h3>
-          <p className="mt-1 text-sm text-slate-500">Aviso individual de apertura a cada gerente con VPN en la campaña activa. El correo no reemplaza la validación en el portal.</p>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button type="button" onClick={load} disabled={loading} className="flex h-11 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -104,7 +112,7 @@ export default function CampaignNotifications() {
         </button>
         {open && <div className="mt-3 overflow-x-auto"><table className="w-full border-collapse text-sm">
           <thead><tr className="bg-slate-50 text-left">
-            <th className="border-b p-3">Gerente</th><th className="border-b p-3">VPN (pendientes)</th><th className="border-b p-3">Correo</th>
+            <th className="border-b p-3">Gerente</th><th className="border-b p-3">{itemLabel} (pendientes)</th><th className="border-b p-3">Correo</th>
             <th className="border-b p-3">Contacto</th><th className="border-b p-3">Aviso</th><th className="border-b p-3">Acción</th>
           </tr></thead>
           <tbody>{data.gerentes.map((g) => {

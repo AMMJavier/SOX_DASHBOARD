@@ -6,7 +6,10 @@ import { exportToExcel } from "../../../../utils/sox/control_7/exportExcel";
 import { exportToPdf } from "../../../../utils/sox/control_7/exportPdf";
 import { registerExport } from "../../../../utils/sox/control_7/registerExport";
 import { formatDateTime } from "../../../../utils/dateTime";
-import { errorText, getInternalCampaignRows, loadInternalFromLdap } from "../../../../services/sox/control_7/internalVpnService";
+import {
+  errorText, getInternalCampaignRows, getInternalNotifications, loadInternalFromLdap, sendInternalNotifications,
+} from "../../../../services/sox/control_7/internalVpnService";
+import CampaignNotifications from "../../../../components/SOX/control_7/CampaignNotifications";
 import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_CAMPAIGN_COLUMNS, internalStatus } from "./internalShared";
 
 const SELECT = "h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm";
@@ -57,6 +60,9 @@ export default function InternalCampaign() {
       <h1 className="text-2xl font-bold">Campañas SOX · VPN internas</h1>
       <p className="mt-1 text-slate-500">{data.campana ? `${data.campana.nombre} · fecha límite ${formatDateTime(data.campana.fecha_limite, { seconds: false })}` : "Gestión de la campaña activa y sus validaciones."}</p>
       {message && <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+
+      <CampaignNotifications fetchData={getInternalNotifications} sendData={sendInternalNotifications} itemLabel="Accesos internos"
+        description="Aviso individual de apertura a cada gerente con cuentas de VPN interna (RDP o Aplicaciones) en la campaña activa. El correo es el de Active Directory; no reemplaza la validación en el portal."/>
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
