@@ -7,7 +7,7 @@ import { exportToPdf } from "../../../../utils/sox/control_7/exportPdf";
 import { registerExport } from "../../../../utils/sox/control_7/registerExport";
 import { formatDateTime } from "../../../../utils/dateTime";
 import { errorText, getInternalHistory, getInternalHistoryFilters } from "../../../../services/sox/control_7/internalVpnService";
-import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_HISTORY_COLUMNS } from "./internalShared";
+import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_HISTORY_COLUMNS, hasDecision } from "./internalShared";
 
 const SELECT = "h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm";
 
@@ -102,7 +102,7 @@ export default function InternalHistory() {
                 <td className="border-b border-slate-100 p-4">{ACCESS_LABEL[item.tipo_acceso]}</td>
                 <td className="border-b border-slate-100 p-4">{item.gerente || "-"}</td>
                 <td className="border-b border-slate-100 p-4"><StatusBadge status={historyStatus(item)}/></td>
-                <td className="border-b border-slate-100 p-4">{item.confirmacion === 1 ? DECISION_LABEL[item.estado] : "-"}</td>
+                <td className="border-b border-slate-100 p-4">{hasDecision(item) ? DECISION_LABEL[item.estado] : "-"}</td>
                 <td className="border-b border-slate-100 p-4">{item.observacion || "-"}</td>
                 <td className="border-b border-slate-100 p-4">{item.deadline ? formatDateTime(item.deadline, { seconds: false }) : "-"}</td>
                 <td className="border-b border-slate-100 p-4">{item.confirmado_por || "-"}</td>

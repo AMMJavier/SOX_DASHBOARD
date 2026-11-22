@@ -1,563 +1,147 @@
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
-import Pagination from "../../../components/common/Pagination";
-import { getManagers, getMyManagers } from "../../../services/sox/control_7/managerService";
-
-// Compara nombres de gerente sin acentos, mayúsculas, espacios dobles ni NBSP (igual que el backend).
-const normalizeManager = (value) => String(value || "")
-  .replace(/ /g, " ").normalize("NFKD").replace(/[̀-ͯ]/g, "")
-  .replace(/\s+/g, " ").trim().toLowerCase();
-
-import {
-  getValidationsByManager,
-  updateValidation,
-  confirmAllValidations,
-} from "../../../services/sox/control_7/validationService";
-
+import { confirmAllValidations, getMyValidations, updateValidation } from "../../../services/sox/control_7/validationService";
 import { getCampaignStatus } from "../../../services/sox/control_7/campaignService";
+import {
+  confirmAllInternal, errorText, getMyInternalAccounts, saveInternalDecision,
+} from "../../../services/sox/control_7/internalVpnService";
+import SaveAllModal from "./gerente/SaveAllModal";
+import VpnBox from "./gerente/VpnBox";
+import { SCOPES, buildPlan, externalRow, internalRow, needsObservation, statusFor } from "./gerente/vpnRows";
 
+const SEMAPHORE = {
+  verde: { color: "bg-green-500", text: "En plazo" },
+  amarillo: { color: "bg-yellow-400", text: "Próximo a vencer" },
+  rojo: { color: "bg-red-500", text: "Tiempo agotado" },
+};
+
+// Cómo se lee y se guarda cada cuadro.
+const API = {
+  externas: {
+    load: async () => ((await getMyValidations()).items || []).map(externalRow),
+    saveOne: (r) => updateValidation(r.id, { decision: r.decision, observation: r.observation }),
+    saveAll: (rows) => confirmAllValidations({
+      validations: rows.map((r) => ({ checkpoint_uid: r.id, decision: r.decision, observation: r.observation })),
+    }),
+  },
+  internas: {
+    load: async () => ((await getMyInternalAccounts()).items || []).map(internalRow),
+    saveOne: (r) => saveInternalDecision(r.id, { decision: r.decision, observation: r.observation }),
+    saveAll: (rows) => confirmAllInternal(rows.map((r) => ({ id: r.id, decision: r.decision, observation: r.observation }))),
+  },
+};
+const KEYS = Object.keys(SCOPES);
+const EMPTY = { rows: [], loading: true, error: "" };
+
+/** Panel del gerente: SUS VPN externas e internas en una sola página. */
 export default function ManagerDashboard() {
-  const loggedUser = JSON.parse(localStorage.getItem("soxUser"));
+  const [boxes, setBoxes] = useState({ externas: EMPTY, internas: EMPTY });
+  const [touched, setTouched] = useState({ externas: false, internas: false });
+  const [campaign, setCampaign] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
-  const [managers, setManagers] = useState([]);
-  const [selectedManager, setSelectedManager] = useState("");
-  const [validations, setValidations] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 30;
-  const [editingId, setEditingId] = useState(null);
-  const [savedIds, setSavedIds] = useState([]);
-  const [campaignExpired,setCampaignExpired] = useState(false);
-  const [campaignStatus,setCampaignStatus] = useState(null);
+  const setBox = (key, patch) => setBoxes((b) => ({ ...b, [key]: { ...b[key], ...patch } }));
+  const setRows = (key, update) => setBoxes((b) => ({ ...b, [key]: { ...b[key], rows: update(b[key].rows) } }));
 
-  // Gerentes vinculados al usuario en sesión (SOX_GERENTES_CONTACTO.LDAP_CN = su usuario LDAP).
-  const [myManagers, setMyManagers] = useState([]);
+  async function load(key) {
+    try { setBox(key, { rows: await API[key].load(), loading: false, error: "" }); }
+    catch (e) { setBox(key, { loading: false, error: errorText(e, `No se pudieron cargar tus ${SCOPES[key].lower}.`) }); }
+  }
 
   useEffect(() => {
-    getMyManagers().then(setMyManagers).catch(() => setMyManagers([]));
+    KEYS.forEach(load);
+    getCampaignStatus().then(setCampaign).catch((e) => console.error("Estado de campaña:", e));
   }, []);
 
-  // Un gerente solo valida las VPN asignadas a SU nombre de gerente; administración ve todas.
-  // Antes se comparaba con el usuario de sesión (p. ej. "pgalecio" vs "TIC Paola Galecio"), que nunca coincidía.
-  const isOwnManager =
-    loggedUser?.rol !== "gerencial" ||
-    normalizeManager(selectedManager) === normalizeManager(loggedUser?.name) ||
-    myManagers.some((name) => normalizeManager(name) === normalizeManager(selectedManager));
+  const expired = !!campaign?.expired;
+  const semaphore = SEMAPHORE[campaign?.semaforo];
+  const rowsByScope = { externas: boxes.externas.rows, internas: boxes.internas.rows };
 
-  // Si el gerente tiene un único nombre asignado, se selecciona solo al entrar
-  // (tomando la opción exacta de la lista para que coincida con el desplegable).
-  useEffect(() => {
-    if (loggedUser?.rol !== "gerencial" || selectedManager || myManagers.length !== 1) return;
-    const own = managers.find((m) => normalizeManager(m.name) === normalizeManager(myManagers[0]));
-    if (own) setSelectedManager(own.name);
-  }, [myManagers, managers]);
+  const change = (key) => (id, field, value) => setRows(key, (rows) => rows.map((r) => (
+    r.id !== id ? r : { ...r, [field]: value, ...(field === "decision" && value !== "Otro" ? { observation: "" } : {}) })));
+  const touch = (key) => () => setTouched((t) => (t[key] ? t : { ...t, [key]: true }));
+  const markSaved = (key, ids) => setRows(key, (rows) => rows.map((r) => (
+    ids.includes(r.id) ? { ...r, status: statusFor(r.decision) } : r)));
 
-useEffect(()=>{
-async function loadCampaignStatus(){
-    const data = await getCampaignStatus();
-    setCampaignExpired(data.expired);
-    setCampaignStatus(data);
-}
-
-loadCampaignStatus();
-
-
-},[]);
-
- useEffect(() => {
- async function loadManagers() {
-   const data = await getManagers();
-   console.log("GERENTES DESDE API:", data);
-   setManagers(data);
- }
-
- loadManagers();
-
-}, []);
-
-  useEffect(() => {
-  async function loadValidations() {
-
-    if (!selectedManager) {
-      setValidations([]);
-      return;
-    }
-
-    console.log("Gerente seleccionado:", selectedManager);
-
-    const data = await getValidationsByManager(selectedManager);
-
-      setValidations(data);
-      setCurrentPage(1);
-      console.log("VALIDACIONES CARGADAS:", data);
-
-      console.log(
-        "IDS:",
-        data.map(x => x.id)
-      );
-
-      const saved = data
-      .filter(
-        item =>
-          item.confirmed === 1 
-      )
-      .map(item => item.id);
-
-
-      setSavedIds(saved);
-  }
-
-  loadValidations();
-
-}, [selectedManager]);
-
-  const handleChange = (id, field, value) => {
-    setValidations((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
-    );
-    
-  };
-  const enableEdit = (id) => {
-      setEditingId(id);
-    };
-  const saveValidation = async (item) => {
-
-    if (!item.decision) {
-      alert("Debe seleccionar una decisión antes de guardar.");
-      return;
-    }
-
-
-    if (
-      item.decision === "Otro" &&
-      (!item.observation || item.observation.trim() === "")
-    ) {
-      alert("Debe ingresar una observación cuando seleccione 'Otro'.");
-      return;
-    }
-
+  const saveOne = (key) => async (row) => {
+    if (!row.decision) { setFeedback({ error: true, text: "Debe seleccionar una decisión antes de guardar." }); return; }
+    if (needsObservation(row)) { setFeedback({ error: true, text: "Debe ingresar una observación cuando seleccione \"Otro\"." }); return; }
+    setBusy(true); setFeedback(null);
     try {
-
-      await updateValidation(item.id,{
-        decision:item.decision,
-        observation:item.observation || "",
-      });
-
-
-      // marcar como guardado
-      setValidations((prev)=>
-        prev.map(row =>
-            row.id === item.id
-            ? {
-                ...row,
-                confirmed:1,
-                decision:item.decision,
-                observation:item.observation || ""
-              }
-            : row
-        )
-      );
-
-
-      // bloquear nuevamente
-      setEditingId(null);
-      alert("Validación guardada correctamente");
-
-    } catch(error){
-
-      console.error("Error guardando validación:",error);
-      
-      if 
-      (
-        error.response &&
-        error.response.data &&
-        error.response.data.detail
-      ){
-        alert(error.response.data.detail);
-      }
-      else{
-        alert("No se pudo guardar la validación");
-      }
-    }
-
-};
-
-const handleSaveAll = async () => {
-  console.log("PAYLOAD GUARDAR TODAS:", validations);
-  try {
-
-    const pendingValidations = validations
-    .filter(item => Number(item.confirmed) === 0)
-    .map(item => ({
-        checkpoint_uid:item.id,
-        decision:item.decision,
-        observation:item.observation || ""
-    }));
-
-    // Validar decisiones vacías
-    const invalid = pendingValidations.some(
-      item => !item.decision
-    );
-
-    if (invalid) {
-      alert("Existen VPN sin decisión seleccionada.");
-      return;
-    }
-
-    // Validar observación cuando es Otro
-    const invalidObservation = pendingValidations.some(
-      item =>
-        item.decision === "Otro" &&
-        (!item.observation ||
-         item.observation.trim() === "")
-    );
-
-    if (invalidObservation) {
-      alert("Debe ingresar observación para las opciones 'Otro'.");
-      return;
-    }
-
-    console.log("ENVIADO AL BACKEND", {validations: pendingValidations});
-    await confirmAllValidations({
-      validations: pendingValidations
-    }
-    );
-
-    // Actualizar pantalla sin recargar
-    setValidations(prev =>
-      prev.map(item => ({
-        ...item,
-        confirmed: 1
-      }))
-    );
-
-    alert(
-      "Todas las validaciones fueron confirmadas correctamente"
-    );
-
-
-  } catch(error){
-    console.error(
-      "Error confirmando todas las validaciones:",
-      error
-    );
-    if(
-      error.response &&
-      error.response.data &&
-      error.response.data.detail
-    )
-    {
-      alert(error.response.data.detail);
-    }
-    else{
-    alert("No se pudieron confirmar las validaciones");
-    }
-    
-  }
-};
-  
-  const totalPages = Math.ceil(
-    validations.length / rowsPerPage
-  );
-
-
-  const paginatedValidations =
-  validations.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
-
-  const getSemaphore = () => {
-
-  if(!campaignStatus){ return null; }
-    
-  const config = { 
-  verde: { 
-      color:"bg-green-500",
-      text:"En plazo"
-  },
-
-  amarillo:{
-      color:"bg-yellow-400",
-      text:"Próximo a vencer"
-  },
-
-  rojo:{
-      color:"bg-red-500",
-      text:"Tiempo agotado"
-  }};
-
-  return config[campaignStatus.semaforo];
+      await API[key].saveOne(row);
+      markSaved(key, [row.id]);
+      setFeedback({ error: false, text: statusFor(row.decision) === "reportada"
+        ? `Guardada. La VPN queda pendiente hasta que el administrador la revise ("${row.decision}").`
+        : "Validación guardada correctamente." });
+    } catch (e) { setFeedback({ error: true, text: errorText(e, "No se pudo guardar la validación.") }); }
+    finally { setBusy(false); }
   };
+
+  async function saveAll() {
+    setBusy(true); setFeedback(null);
+    const done = [], failed = [];
+    for (const scope of plan.scopes) { // Cada cuadro se guarda por separado: si uno falla, el otro queda guardado.
+      try {
+        const r = await API[scope.key].saveAll(scope.toSave);
+        const ids = r.guardadas || [];
+        markSaved(scope.key, ids);
+        setTouched((t) => ({ ...t, [scope.key]: false }));
+        const skipped = scope.toSave.length - ids.length;
+        done.push(`${SCOPES[scope.key].title}: ${ids.length} guardada(s)${skipped ? `, ${skipped} no se guardaron porque ya estaban respondidas o cambiaron` : ""}`);
+        if (skipped) await load(scope.key);
+      } catch (e) { failed.push(`${SCOPES[scope.key].title}: ${errorText(e, "no se pudieron guardar")}`); }
+    }
+    const missing = plan.missing.map((m) => `faltan ${m.count} de ${SCOPES[m.key].lower}`);
+    setFeedback({ error: failed.length > 0, text: [...done, ...failed, ...missing].join(" · ") });
+    setPlan(null); setBusy(false);
+  }
 
   return (
     <div>
       <h1 className="text-2xl font-bold">Dashboard Gerente</h1>
+      <p className="mt-1 text-slate-500">Valida tus VPN externas e internas de la campaña activa.</p>
 
-      <p className="mt-1 text-slate-500">
-        Selecciona tu nombre y valida únicamente las VPN o comunidades asignadas.
-      </p>
-
-      <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
-        <label className="mr-4 text-sm font-bold text-slate-700">
-          Seleccionar gerente
-        </label>
-
-        <select
-          value={selectedManager}
-          onChange={(event) => setSelectedManager(event.target.value)}
-          className="h-12 w-full max-w-md rounded-xl border border-blue-300 bg-white px-4 outline-none"
-        >
-          <option value="">Seleccionar gerente</option>
-
-          {managers.map((manager) => (
-            <option key={manager.id} value={manager.name}>
-              {manager.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
-        <h3 className="text-base font-bold text-amber-800">
-          Instrucciones para la validación
-        </h3>
-
+      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h3 className="text-base font-bold text-amber-800">Instrucciones para la validación</h3>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-700">
-          <li>
-            Seleccione correctamente su nombre en el campo <b>Seleccionar gerente</b>.
-          </li>
-          <li>
-            Solo podrá visualizar y validar las VPN o comunidades asignadas a su nombre.
-          </li>
-          <li>
-            En la columna <b>Decisión</b>, seleccione una opción: Mantener, Eliminar,
-            No pertenece u Otro.
-          </li>
-          <li>
-            El campo <b>Observación</b> solo se habilita cuando se selecciona la opción
-            <b> Otro</b>.
-          </li>
-          <li>
-            Si selecciona <b>Otro</b>, la observación es obligatoria. Si no escribe una
-            observación, el sistema no permitirá guardar la validación.
-          </li>
+          <li>Solo ves las VPN asignadas a tu usuario: primero las <b>externas</b> y más abajo las <b>internas</b>.</li>
+          <li>En la columna <b>Decisión</b>, seleccione una opción: Mantener, Eliminar, No pertenece u Otro.</li>
+          <li>El campo <b>Observación</b> solo se habilita con la opción <b>Otro</b> y es obligatorio.</li>
+          <li>Con <b>No pertenece</b> u <b>Otro</b> la VPN queda <b>pendiente</b> hasta que el administrador la revise.</li>
+          <li>Una vez guardada la decisión <b>no se puede cambiar</b>.</li>
+          <li><b>Guardar todas</b> guarda solo el cuadro en el que trabajaste.</li>
         </ul>
       </div>
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center justify-between flex-wrap gap-4">
-          {campaignStatus && (
-            <div className= "order-1 flex items-center gap-3">
-              <span className={`h-4 w-4 rounded-full 
-                ${getSemaphore().color}`}>
-              </span>
-              <div>
-                <p className="font-bold">
-                  Estado de campaña:
-                  {
-                    getSemaphore().text
-                  }
-                </p>
-                <p className="text-sm text-slate-500">
-                  Fecha límite:
-                  {
-                    campaignStatus.fecha_limite
-                  }
-                  (
-                  {
-                    campaignStatus.dias_restantes
-                  }
-                    -días restantes
-                  )
-                </p>
-                </div>
-              </div>
-          )}
-          <h3 className= "order-2 text-lg font-bold">
-            Cliente VPN Externos</h3>
-        <button
 
-          disabled={campaignExpired}
-          onClick={handleSaveAll}
+      {campaign?.active && <div className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <span className={`h-4 w-4 shrink-0 rounded-full ${semaphore?.color || "bg-slate-300"}`}/>
+        <div>
+          <p className="font-bold">Estado de campaña: {semaphore?.text || "-"}</p>
+          <p className="text-sm text-slate-500">Fecha límite: {campaign.fecha_limite} ({Math.max(campaign.dias_restantes, 0)} días restantes)</p>
+        </div>
+      </div>}
+      {campaign && !campaign.active && <p className="mt-6 rounded-2xl bg-amber-50 p-5 text-sm text-amber-800">No hay una campaña activa.</p>}
 
-          className={`order-3 flex items-center gap-2 rounded-lg px-5 py-2 font bold text-white ${ campaignExpired
-          ?  "bg-slate-400 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-600"}`}>
-         
-          <Save size={16}/>
-          { campaignExpired ? "Campaña cerrada" : "Guardar todas" }
-          
-        </button>
+      <VpnBox title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
+        expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes VPN externas asignadas a tu usuario en esta campaña."
+        onChange={change("externas")} onSave={saveOne("externas")} onTouch={touch("externas")}/>
+
+      <VpnBox title="VPN Internas" headers={["Cuenta", "Nombre", "Acceso"]} {...boxes.internas}
+        expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes cuentas con VPN interna a cargo en esta campaña."
+        onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
+
+      <div className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
+        <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">
+          {feedback?.text || "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos)."}</p>
+        <button type="button" disabled={expired || busy || !campaign?.active} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
+          className="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
+          <Save size={16}/>{expired ? "Campaña cerrada" : "Guardar todas"}</button>
       </div>
 
-        {!selectedManager ? (
-          <div className="rounded-xl bg-slate-50 p-8 text-center text-slate-500">
-            Selecciona un gerente para visualizar la información asignada.
-          </div>
-        ) : !isOwnManager ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
-            <h3 className="text-lg font-bold text-red-700">
-              Acceso restringido
-            </h3>
-            <p className="mt-2 text-red-600">
-              No puedes visualizar ni validar VPN asignadas a otro gerente.
-            </p>
-          </div>
-        ) : validations.length === 0 ? (
-          <div className="rounded-xl bg-slate-50 p-8 text-center text-slate-500">
-            No existen registros asignados a este gerente.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-left">
-                  
-                  <th className="border-b border-slate-200 p-4">VPN</th>
-                  <th className="border-b border-slate-200 p-4">
-                    Nombre VPN
-                  </th>
-                  <th className="border-b border-slate-200 p-4">
-                    Gerente Asignado
-                  </th>
-                  <th className="border-b border-slate-200 p-4">Decisión</th>
-                  <th className="border-b border-slate-200 p-4">
-                    Observación
-                  </th>
-                  <th className="border-b border-slate-200 p-4">Confirmación</th>
-                  <th className="border-b border-slate-200 p-4">
-                    Fecha Límite
-                  </th>
-                  <th className="border-b border-slate-200 p-4">Guardar</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {paginatedValidations.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-
-                    <td className="border-d border-slate-100 p-4">
-                      {item.req}
-                    </td>
-
-                    <td className="border-b border-slate-100 p-4">
-                      {item.nombre_vpn || "-"}
-                    </td>
-                  
-                    <td className="border-b border-slate-100 p-4">
-                      {item.manager}
-                    </td>
-
-                    
-
-                    <td className="border-b border-slate-100 p-4">
-                      <select
-                        value={item.decision || ""}
-                        disabled={
-                          campaignExpired ||
-                          (
-                          item.confirmed === 1 &&
-                          editingId !== item.id
-                          )
-                        }
-                        onChange={(event)=>
-                          handleChange(
-                            item.id,
-                            "decision",
-                            event.target.value
-                          )
-                        }
-                        className="h-10 rounded-lg border border-slate-300 px-3 outline-none bg-white"
-                      >
-                        <option value="">Seleccionar</option>
-                        <option value="Mantener">Mantener</option>
-                        <option value="Eliminar">Eliminar</option>
-                        <option value="No pertenece">No pertenece</option>
-                        <option value="Otro">Otro</option>
-                      </select>
-                      
-                    </td>
-
-                    <td className="border-b border-slate-100 p-4">
-                      <input
-                        value={item.observation}
-                        onChange={(event) =>
-                          handleChange(
-                            item.id,
-                            "observation",
-                            event.target.value
-                          )
-                        }
-                        disabled={
-                          campaignExpired ||
-                            item.decision !== "Otro" ||
-                            (
-                            item.confirmed === 1 &&
-                            editingId !== item.id
-                            )
-                          }
-                        placeholder={
-                          item.decision === "Otro"
-                            ? "Ingrese observación"
-                            : "Bloqueado"
-                        }
-                        className={`h-10 w-64 rounded-lg border px-3 outline-none ${
-                          item.decision === "Otro"
-                            ? "border-slate-300 bg-white"
-                            : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        }`}
-                      />
-                    </td>
-                    
-                    <td className="border-b border-slate-100 p-4">
-                        {item.confirmed === 1 ? "Confirmado" : "Pendiente"}
-                      </td>
-
-                    <td className="border-b border-slate-100 p-4">
-                      {item.fecha_limite || item.deadline}
-                    </td>
-
-                    <td className="border-b border-slate-100 p-4">
-                      <button
-                        disabled={campaignExpired}
-                          onClick={() => {
-
-                          if(campaignExpired){
-                              return;
-                          }
-                          if(item.confirmed === 1 && editingId !== item.id){
-                              setEditingId(item.id);
-                          }else{
-                              saveValidation(item);
-                          }
-
-                          }}
-                          className={` flex items-center gap-2 rounded-lg px-4 py-2 font-bold text-white ${
-                          campaignExpired ? "bg-slate-400 cursor-not-allowed" : item.confirmed === 1 && editingId !== item.id ?
-                          "bg-green-600 hover:bg-green-700" : "bg-amber-500 hover:bg-amber-600" } `} >
-
-                        <Save size={16}/>
-                        {
-                          campaignExpired ? "Bloqueado" :
-                        item.confirmed === 1 && editingId !== item.id
-                        ? "Modificar"
-                        : "Guardar"
-                        }
-
-                        </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-              
-          </div>
-        )}
-        <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              />
-      </div>
+      {plan && <SaveAllModal plan={plan} touchedAny={touched.externas || touched.internas} busy={busy}
+        onClose={() => setPlan(null)} onConfirm={saveAll}/>}
     </div>
   );
 }

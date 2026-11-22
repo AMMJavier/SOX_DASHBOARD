@@ -176,6 +176,12 @@ def _loop():
             run_once()
         except Exception as exc:
             mail.console(f"AUTOMATICO: error en la revisión programada | {type(exc).__name__}: {exc}")
+        try:
+            # Control 7: recordatorio diario a gerentes con VPN por validar.
+            from services.sox.control_7 import daily_reminder
+            daily_reminder.run_once()
+        except Exception as exc:
+            mail.console(f"RECORDATORIO C7: error en la revisión programada | {type(exc).__name__}: {exc}")
         time.sleep(CHECK_EVERY_SECONDS)
 
 

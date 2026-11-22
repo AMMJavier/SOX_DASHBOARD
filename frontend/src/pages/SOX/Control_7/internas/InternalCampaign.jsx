@@ -11,7 +11,7 @@ import {
   errorText, getInternalCampaignRows, getInternalNotifications, loadInternalFromLdap, sendInternalNotifications,
 } from "../../../../services/sox/control_7/internalVpnService";
 import CampaignNotifications from "../../../../components/SOX/control_7/CampaignNotifications";
-import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_CAMPAIGN_COLUMNS, internalStatus } from "./internalShared";
+import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_CAMPAIGN_COLUMNS, hasDecision, internalStatus } from "./internalShared";
 
 const SELECT = "h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm";
 
@@ -41,7 +41,7 @@ export default function InternalCampaign() {
     return text.includes(search.toLowerCase())
       && (!manager || item.gerente === manager)
       && (!status || internalStatus(item, expired) === status)
-      && (!decision || (item.confirmacion === 1 && item.estado === decision))
+      && (!decision || (hasDecision(item) && item.estado === decision))
       && (!access || item.tipo_acceso === access);
   });
   const totalPages = Math.ceil(filtered.length / rowsPerPage);
@@ -64,13 +64,13 @@ export default function InternalCampaign() {
 
   async function reloadLdap(replace = false) {
     const question = replace
-      ? "¿Borrar la carga actual de VPN internas de esta campaña y cargarla de nuevo desde LDAP con los GERENTES? Solo se permite si ningún gerente ha confirmado cuentas."
+      ? "¿Borrar la carga actual de VPN internas de esta campaña y cargarla de nuevo desde LDAP con los GERENTES? Solo se permite si ningún gerente ha respondido cuentas."
       : "¿Volver a leer los grupos LDAP RDP y APLICACIONES? Las cuentas ya confirmadas conservan su decisión.";
     if (!window.confirm(question)) return;
     setBusy(true); setMessage("");
     try {
       const r = await loadInternalFromLdap(replace);
-      setMessage(`${r.reemplazo ? `Carga reemplazada: ${r.borrados} registro(s) anteriores borrados. ` : ""}LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.gerente_manual ? `, ${r.gerente_manual} con gerente asignado a mano (se conserva)` : ""}${r.reasignadas_confirmadas ? `, ${r.reasignadas_confirmadas} confirmada(s) que cambiaron de gerente y volvieron a pendiente` : ""}.`);
+      setMessage(`${r.reemplazo ? `Carga reemplazada: ${r.borrados} registro(s) anteriores borrados. ` : ""}LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.gerente_manual ? `, ${r.gerente_manual} con gerente asignado a mano (se conserva)` : ""}${r.reasignadas_reportadas ? `, ${r.reasignadas_reportadas} reportada(s) (Otro / No pertenece) que pasaron a un gerente nuevo` : ""}.`);
       load();
     } catch (e) { setMessage(errorText(e, "No se pudo leer LDAP.")); }
     finally { setBusy(false); }
@@ -159,7 +159,7 @@ export default function InternalCampaign() {
                   )}
                 </td>
                 <td className="border-b p-4"><StatusBadge status={internalStatus(item, expired)}/></td>
-                <td className="border-b p-4">{item.confirmacion === 1 ? DECISION_LABEL[item.estado] : "-"}</td>
+                <td className="border-b p-4">{hasDecision(item) ? DECISION_LABEL[item.estado] : "-"}</td>
                 <td className="border-b p-4">{item.observacion || "-"}</td>
                 <td className="border-b p-4">{item.confirmado_por || "-"}</td>
                 <td className="border-b p-4">{item.fecha_modificacion ? formatDateTime(item.fecha_modificacion, { seconds: false }) : "-"}</td>

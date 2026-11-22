@@ -266,6 +266,13 @@
           "",
           "{tabla_vpn}Saludos."
         ]
+      },
+      "recordatorio_diario": {
+        "_info": "Cada día, desde el siguiente al aviso de apertura y hasta la fecha límite, recuerda a cada gerente cuántas VPN (externas + internas) le faltan por validar. No se envía a quien ya validó todas ni a quien aún no recibió el aviso de apertura. Requiere automatico.activo=true. Usa el modo_prueba de aviso_gerentes. copias: CC solo de este recordatorio.",
+        "_variables": "{gerente} {campana} {periodo} {pendientes} {pendientes_externas} {pendientes_internas} {fecha_limite} {dias_restantes} {linea_portal} {portal}",
+        "activo": false,
+        "hora_desde": "09:00",
+        "copias": []
       }
     }
   }

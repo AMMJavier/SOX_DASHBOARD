@@ -126,6 +126,7 @@ def get_admin_managers():
             SUM(
                 CASE
                     WHEN CONFIRMACION = 1
+                     AND LOWER(TRIM(NVL(ESTADO, 'mantener'))) NOT IN ('no pertenece', 'otro')
                     THEN 1
                     ELSE 0
                 END
@@ -149,6 +150,7 @@ def get_admin_managers():
                     )
                 ) GERENTE_KEY,
 
+                ESTADO,
                 CONFIRMACION,
 
                 ROW_NUMBER() OVER(
@@ -211,6 +213,7 @@ def get_dashboard_responsibles():
             SUM(
                 CASE
                     WHEN CONFIRMACION = 1
+                     AND LOWER(TRIM(NVL(ESTADO, 'mantener'))) NOT IN ('no pertenece', 'otro')
                     THEN 1
                     ELSE 0
                 END
@@ -221,6 +224,7 @@ def get_dashboard_responsibles():
             SELECT
                 CHECKPOINT_UID,
                 GERENTE,
+                ESTADO,
                 CONFIRMACION,
 
                 ROW_NUMBER() OVER(

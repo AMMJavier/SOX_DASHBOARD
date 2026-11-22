@@ -1,0 +1,83 @@
+import { useState } from "react";
+import { Lock, Save } from "lucide-react";
+import Pagination from "../../../../components/common/Pagination";
+import { CONFIRMED, DECISIONS, PENDING, REPORTED, summarize } from "./vpnRows";
+
+const ROWS_PER_PAGE = 30;
+const TH = "border-b border-slate-200 p-4";
+const TD = "border-b border-slate-100 p-4";
+
+function Status({ status }) {
+  if (status === CONFIRMED) return <span className="font-semibold text-emerald-700">Confirmado</span>;
+  return <span className="font-semibold text-amber-700">Pendiente
+    {status === REPORTED && <span className="block text-xs font-normal text-slate-500">En revisión del administrador</span>}</span>;
+}
+
+/** Cuadro de VPN del gerente (externas o internas). Lo guardado queda bloqueado. */
+export default function VpnBox({ title, headers, rows, loading, error, expired, busy, emptyText, deadline, onChange, onSave, onTouch }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.ceil(rows.length / ROWS_PER_PAGE);
+  const current = Math.min(page, Math.max(pages, 1));
+  const visible = rows.slice((current - 1) * ROWS_PER_PAGE, current * ROWS_PER_PAGE);
+  const { pending } = summarize(rows);
+  const confirmed = rows.filter((r) => r.status === CONFIRMED).length;
+  const reported = rows.filter((r) => r.status === REPORTED).length;
+
+  // Cualquier clic o cambio dentro del cuadro cuenta como interacción, salvo el botón individual.
+  const touch = (e) => { if (!e.target.closest("[data-individual]")) onTouch(); };
+
+  return (
+    <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" onClickCapture={touch} onChangeCapture={touch}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold">{title}</h3>
+        {rows.length > 0 && <p className="text-sm text-slate-500">
+          <b className="text-slate-800">{rows.length}</b> en total · <b className="text-emerald-700">{confirmed}</b> confirmadas ·{" "}
+          <b className="text-amber-700">{pending}</b> por validar{reported > 0 && <> · <b className="text-slate-700">{reported}</b> en revisión</>}
+        </p>}
+      </div>
+
+      {error ? <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>
+        : loading ? <p className="rounded-xl bg-slate-50 p-8 text-center text-slate-500">Cargando...</p>
+        : rows.length === 0 ? <p className="rounded-xl bg-slate-50 p-8 text-center text-slate-500">{emptyText}</p>
+        : <div className="overflow-x-auto">
+          <table className="w-full min-w-[1000px] border-collapse text-sm">
+            <thead><tr className="bg-slate-50 text-left">
+              {[...headers, "Decisión", "Observación", "Confirmación", "Fecha Límite", "Guardar"].map((h) => <th key={h} className={TH}>{h}</th>)}
+            </tr></thead>
+            <tbody>{visible.map((r) => {
+              const locked = expired || busy || r.status !== PENDING;
+              const other = r.decision === "Otro";
+              return (
+                <tr key={r.id} className="hover:bg-slate-50">
+                  {r.cells.map((value, i) => <td key={headers[i]} className={`${TD} ${i === 0 ? "font-semibold" : ""}`}>{value}
+                    {i === 1 && r.note && <p className="text-xs text-red-600">{r.note}</p>}</td>)}
+                  <td className={TD}>
+                    <select value={r.decision} disabled={locked} onChange={(e) => onChange(r.id, "decision", e.target.value)}
+                      className="h-10 rounded-lg border border-slate-300 bg-white px-3 outline-none disabled:bg-slate-100 disabled:text-slate-500">
+                      <option value="">Seleccionar</option>{DECISIONS.map((d) => <option key={d}>{d}</option>)}
+                    </select>
+                  </td>
+                  <td className={TD}>
+                    <input value={r.observation} disabled={locked || !other} maxLength={1000}
+                      onChange={(e) => onChange(r.id, "observation", e.target.value)}
+                      placeholder={other ? "Ingrese observación" : "Bloqueado"}
+                      className="h-10 w-56 rounded-lg border border-slate-300 px-3 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"/>
+                  </td>
+                  <td className={TD}><Status status={r.status}/></td>
+                  <td className={TD}>{deadline || "-"}</td>
+                  <td className={TD}>
+                    {r.status === PENDING
+                      ? <button type="button" data-individual disabled={locked} onClick={() => onSave(r)}
+                          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
+                          <Save size={16}/>{expired ? "Bloqueado" : "Guardar"}</button>
+                      : <span className="flex items-center gap-2 text-sm font-semibold text-slate-500"><Lock size={15}/>Guardada</span>}
+                  </td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>}
+      <Pagination currentPage={current} totalPages={pages} onPageChange={setPage}/>
+    </section>
+  );
+}

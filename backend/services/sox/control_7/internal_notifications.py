@@ -42,7 +42,8 @@ def _managers(db, campaign_id):
     rows = db.execute(text("""
         SELECT GERENTE_USUARIO AS "usuario", MIN(GERENTE) AS "gerente", MAX(GERENTE_CORREO) AS "correo",
                COUNT(DISTINCT GERENTE_CORREO) AS "correos", COUNT(*) AS "accesos",
-               SUM(CONFIRMACION) AS "confirmadas"
+               SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END) AS "confirmadas",
+               SUM(CASE WHEN ESTADO IN ('no pertenece', 'otro') THEN 1 ELSE 0 END) AS "reportadas"
           FROM AUTOM.SOX_C7_VPN_INTERNAS
          WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL
          GROUP BY GERENTE_USUARIO
@@ -52,7 +53,8 @@ def _managers(db, campaign_id):
         key = KEY_PREFIX + row["usuario"].lower()
         managers[key] = {"key": key, "usuario": row["usuario"], "gerente": row["gerente"] or row["usuario"],
                          "correo": (row["correo"] or "").strip() or None, "ambiguo": int(row["correos"] or 0) > 1,
-                         "vpn": int(row["accesos"] or 0), "confirmadas": int(row["confirmadas"] or 0)}
+                         "vpn": int(row["accesos"] or 0), "confirmadas": int(row["confirmadas"] or 0),
+                         "reportadas": int(row["reportadas"] or 0)}
     counts = db.execute(text("""
         SELECT COUNT(*), NVL(SUM(CASE WHEN GERENTE_USUARIO IS NULL THEN 1 ELSE 0 END), 0)
           FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
@@ -152,7 +154,7 @@ DEFAULT_BODY = (
     "- Período: {periodo}\n"
     "- Accesos internos asociados a usted: {cantidad_vpn}\n"
     "- Fecha límite de validación: {fecha_limite}\n\n"
-    "{linea_portal}, seleccione VPN internas y revise cada acceso indicando si debe mantenerse o "
+    "{linea_portal}, vaya al cuadro VPN internas y revise cada acceso indicando si debe mantenerse o "
     "eliminarse, con observaciones cuando corresponda.\n\n"
     "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
     "usted la confirma en el portal.\n\n"

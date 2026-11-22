@@ -42,7 +42,8 @@ export default function Sidebar() {
       </div>
       <nav className="space-y-1.5" aria-label="Navegación del módulo SOX">
         {role !== "gerencial" && <SidebarItem to="/modules" icon={LayoutGrid} label="Portal de módulos" active={pathname === "/modules"}/>}
-        {id === "7" && <VpnScopeSwitch internal={internal}/>}
+        {/* El gerente valida externas e internas en la misma página: sin selector. */}
+        {id === "7" && role !== "gerencial" && <VpnScopeSwitch internal={internal}/>}
         {internal
           ? <Control7InternalSidebar role={role} pathname={pathname}/>
           : <>

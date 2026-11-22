@@ -14,6 +14,8 @@ import logging
 from fastapi import HTTPException
 from sqlalchemy import text
 
+from services.sox.control_7.decision_rules import confirmation_for, is_answered, is_confirmed, is_reported
+
 logger = logging.getLogger(__name__)
 
 DECISIONS = {"mantener": "mantener", "eliminar": "eliminar", "no pertenece": "no pertenece", "otro": "otro"}
@@ -79,8 +81,9 @@ def _manual_assignments(db, campaign_id, current):
 
 def load_from_ldap(db, campaign_id=None, replace=False):
     """Foto LDAP de la campaña activa con el GERENTE de cada cuenta (primer cargo "Gerente"
-    en la cadena de jefes de AD). Si el gerente no cambió se conserva la decisión; si cambió,
-    la cuenta vuelve a pendiente para el nuevo gerente y el cambio queda en el seguimiento.
+    en la cadena de jefes de AD). Las cuentas confirmadas (Mantener / Eliminar) conservan su
+    gerente y su decisión. Las demás toman el gerente de AD: si cambió, la cuenta vuelve a
+    pendiente para el nuevo gerente y, si estaba reportada, el cambio queda en el seguimiento.
 
     replace=True BORRA la foto anterior de la campaña (cuentas y su seguimiento) y la vuelve a
     cargar desde cero. Se usa al iniciar la campaña y con "Reemplazar carga". Primero se lee LDAP:
@@ -116,11 +119,11 @@ def load_from_ldap(db, campaign_id=None, replace=False):
 
     deleted = 0
     if replace:
-        confirmed = sum(1 for r in current.values() if r["confirmacion"] == 1)
-        if confirmed:
-            log(f"REEMPLAZO CANCELADO | campaña {campaign_id} | {confirmed} cuenta(s) ya confirmadas por gerentes")
-            raise HTTPException(409, f"No se puede reemplazar la carga: {confirmed} cuenta(s) ya fueron "
-                                     "confirmadas por gerentes. Usa \"Cargar desde LDAP\" para actualizarla.")
+        answered = sum(1 for r in current.values() if is_answered(r["estado"], r["confirmacion"]))
+        if answered:
+            log(f"REEMPLAZO CANCELADO | campaña {campaign_id} | {answered} cuenta(s) ya respondidas por gerentes")
+            raise HTTPException(409, f"No se puede reemplazar la carga: {answered} cuenta(s) ya fueron "
+                                     "respondidas por gerentes. Usa \"Cargar desde LDAP\" para actualizarla.")
         db.execute(text("DELETE FROM AUTOM.SOX_C7_VPN_INTERNAS_LOG WHERE ID_CAMPANA = :p_camp"), {"p_camp": campaign_id})
         deleted = db.execute(text("DELETE FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp"),
                              {"p_camp": campaign_id}).rowcount or 0
@@ -142,11 +145,16 @@ def load_from_ldap(db, campaign_id=None, replace=False):
             kept_manual += 1
         else:
             without_manager += 1
-        # Cambio de gerente: el nuevo NO hereda la decisión del anterior. Si ya estaba
-        # confirmada, se deja constancia en el seguimiento y vuelve a pendiente.
         before = current.get((row["usuario"], row["tipo_acceso"]))
+        if before and is_confirmed(before["estado"], before["confirmacion"]):
+            # Confirmada (Mantener / Eliminar): no cambia de gerente al actualizar.
+            manager = {"usuario": before["gerente_usuario"], "nombre": before["gerente"],
+                       "correo": before["gerente_correo"]}
+            is_manual = before["gerente_manual"]
+        # Cambio de gerente: el nuevo NO hereda la respuesta del anterior. Si estaba reportada
+        # (Otro / No pertenece) se deja constancia en el seguimiento y vuelve a pendiente.
         new_user = (manager or {}).get("usuario")
-        if before and (before["gerente_usuario"] or "").lower() != (new_user or "").lower() and before["confirmacion"] == 1:
+        if before and (before["gerente_usuario"] or "").lower() != (new_user or "").lower() and is_reported(before["estado"]):
             reassigned += 1
             note = (f"Cambio de gerente: {before['gerente'] or 'sin gerente'} -> "
                     f"{(manager or {}).get('nombre') or 'sin gerente'}. La decisión anterior queda en el historial "
@@ -200,7 +208,7 @@ def load_from_ldap(db, campaign_id=None, replace=False):
     db.commit()
     summary = {"id_campana": campaign_id, "reemplazo": bool(replace), "borrados": deleted,
                "membresias": len(report["filas"]), "gerentes": len(managers),
-               "sin_gerente": without_manager, "gerente_manual": kept_manual, "reasignadas_confirmadas": reassigned,
+               "sin_gerente": without_manager, "gerente_manual": kept_manual, "reasignadas_reportadas": reassigned,
                "consulta_utc": report["consulta_utc"]}
     log(f"CARGA FIN | {summary}")
     return summary
@@ -212,7 +220,7 @@ _SELECT = """
     SELECT ID AS "id", ID_CAMPANA AS "id_campana", USUARIO AS "usuario", NOMBRE AS "nombre",
            TIPO_ACCESO AS "tipo_acceso", ACTIVO_AD AS "activo_ad", GERENTE AS "gerente",
            GERENTE_USUARIO AS "gerente_usuario", ESTADO AS "estado", OBSERVACION AS "observacion",
-           CONFIRMACION AS "confirmacion", CONFIRMADO_POR AS "confirmado_por",
+           CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END AS "confirmacion", CONFIRMADO_POR AS "confirmado_por",
            FECHA_MODIFICACION AS "fecha_modificacion", GERENTE_MANUAL AS "gerente_manual"
       FROM AUTOM.SOX_C7_VPN_INTERNAS
 """
@@ -245,11 +253,12 @@ def list_admin(db, *, campaign_id=None, search="", gerente="", estado="", tipo="
         where.append("LOWER(GERENTE_USUARIO) = LOWER(:p_ger)")
         params["p_ger"] = gerente
     if estado == "pendiente":
-        where.append("CONFIRMACION = 0")
+        where.append("(CONFIRMACION = 0 OR ESTADO IN ('no pertenece', 'otro'))")
     elif estado == "confirmado":
-        where.append("CONFIRMACION = 1")
+        where.append("CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro')")
     elif estado in DECISIONS:
-        where.append("CONFIRMACION = 1 AND ESTADO = :p_est")
+        # Otro / No pertenece se responden sin confirmar.
+        where.append("ESTADO = :p_est" if is_reported(estado) else "CONFIRMACION = 1 AND ESTADO = :p_est")
         params["p_est"] = estado
     if tipo in ("RDP", "APLICACIONES"):
         where.append("TIPO_ACCESO = :p_tipo")
@@ -261,14 +270,14 @@ def list_admin(db, *, campaign_id=None, search="", gerente="", estado="", tipo="
         OFFSET :p_off ROWS FETCH NEXT :p_lim ROWS ONLY
     """), {**params, "p_off": max(0, offset), "p_lim": max(1, min(limit, 200))}))
     resumen = dict(db.execute(text("""
-        SELECT COUNT(*) AS "total", NVL(SUM(CONFIRMACION), 0) AS "confirmadas",
+        SELECT COUNT(*) AS "total", NVL(SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END), 0) AS "confirmadas",
                NVL(SUM(CASE WHEN GERENTE_USUARIO IS NULL THEN 1 ELSE 0 END), 0) AS "sin_gerente",
                NVL(SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO = 'eliminar' THEN 1 ELSE 0 END), 0) AS "eliminar"
           FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
     """), {"p_camp": campaign_id}).mappings().first() or {})
     gerentes = _rows(db.execute(text("""
         SELECT GERENTE_USUARIO AS "usuario", MIN(GERENTE) AS "nombre", COUNT(*) AS "total",
-               SUM(CONFIRMACION) AS "confirmadas"
+               SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END) AS "confirmadas"
           FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL
          GROUP BY GERENTE_USUARIO ORDER BY MIN(GERENTE)
     """), {"p_camp": campaign_id}))
@@ -286,8 +295,8 @@ def dashboard(db, gerente=""):
         extra = " AND LOWER(GERENTE_USUARIO) = LOWER(:p_ger)"
         params["p_ger"] = gerente
     kpis = dict(db.execute(text(f"""
-        SELECT COUNT(*) AS "total", NVL(SUM(CONFIRMACION), 0) AS "confirmed",
-               NVL(SUM(1 - CONFIRMACION), 0) AS "pending",
+        SELECT COUNT(*) AS "total", NVL(SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END), 0) AS "confirmed",
+               NVL(SUM(1 - CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END), 0) AS "pending",
                NVL(SUM(CASE WHEN GERENTE_USUARIO IS NULL THEN 1 ELSE 0 END), 0) AS "no_owner",
                NVL(SUM(CASE WHEN TIPO_ACCESO = 'RDP' THEN 1 ELSE 0 END), 0) AS "rdp",
                NVL(SUM(CASE WHEN TIPO_ACCESO = 'APLICACIONES' THEN 1 ELSE 0 END), 0) AS "aplicaciones",
@@ -298,7 +307,7 @@ def dashboard(db, gerente=""):
     kpis["expired"] = kpis["pending"] if campaign["vencida"] else 0
     responsables = _rows(db.execute(text(f"""
         SELECT MIN(GERENTE) AS "manager", GERENTE_USUARIO AS "usuario", COUNT(*) AS "total",
-               SUM(CONFIRMACION) AS "confirmed"
+               SUM(CASE WHEN CONFIRMACION = 1 AND ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END) AS "confirmed"
           FROM AUTOM.SOX_C7_VPN_INTERNAS
          WHERE ID_CAMPANA = :p_camp AND GERENTE_USUARIO IS NOT NULL{extra}
          GROUP BY GERENTE_USUARIO ORDER BY MIN(GERENTE)
@@ -348,9 +357,9 @@ def history(db, *, campaign_id=None, year=None, manager="", status="", tipo="", 
         where.append("i.GERENTE = :p_ger")
         params["p_ger"] = manager
     if status == "pendiente":
-        where.append("i.CONFIRMACION = 0")
+        where.append("(i.CONFIRMACION = 0 OR i.ESTADO IN ('no pertenece', 'otro'))")
     elif status in DECISIONS:
-        where.append("i.CONFIRMACION = 1 AND i.ESTADO = :p_est")
+        where.append("i.ESTADO = :p_est" if is_reported(status) else "i.CONFIRMACION = 1 AND i.ESTADO = :p_est")
         params["p_est"] = status
     if tipo in ("RDP", "APLICACIONES"):
         where.append("i.TIPO_ACCESO = :p_tipo")
@@ -362,7 +371,7 @@ def history(db, *, campaign_id=None, year=None, manager="", status="", tipo="", 
         SELECT i.ID AS "id", c.NOMBRE_CAMPANA AS "campaign_name", c.ESTADO AS "campaign_status",
                c.FECHA_LIMITE AS "deadline", c.FECHA_FIN AS "closed_at", i.USUARIO AS "usuario",
                i.NOMBRE AS "nombre", i.TIPO_ACCESO AS "tipo_acceso", i.GERENTE AS "gerente",
-               i.ESTADO AS "estado", i.CONFIRMACION AS "confirmacion", i.OBSERVACION AS "observacion",
+               i.ESTADO AS "estado", CASE WHEN i.CONFIRMACION = 1 AND i.ESTADO NOT IN ('no pertenece', 'otro') THEN 1 ELSE 0 END AS "confirmacion", i.OBSERVACION AS "observacion",
                i.CONFIRMADO_POR AS "confirmado_por", i.FECHA_MODIFICACION AS "fecha_modificacion"
           FROM AUTOM.SOX_C7_VPN_INTERNAS i JOIN AUTOM.CAMPANAS_SOX c ON c.ID_CAMPANA = i.ID_CAMPANA
          WHERE {' AND '.join(where)}
@@ -399,6 +408,11 @@ def _decision(decision, observation):
     return estado, observation or None
 
 
+class AlreadyAnswered(HTTPException):
+    def __init__(self):
+        super().__init__(409, "Esta cuenta ya fue validada y no se puede cambiar")
+
+
 def decide(db, *, item_id, decision, observation, user, accion="MODIFICACION_VALIDACION", commit=True):
     """Guarda la decisión de una cuenta. El gerente solo puede decidir sobre SUS cuentas."""
     estado, observation = _decision(decision, observation)
@@ -408,7 +422,7 @@ def decide(db, *, item_id, decision, observation, user, accion="MODIFICACION_VAL
     if campaign["vencida"]:
         raise HTTPException(403, "La fecha límite de la campaña ya venció")
     row = db.execute(text("""
-        SELECT ID, ID_CAMPANA, USUARIO, TIPO_ACCESO, GERENTE, GERENTE_USUARIO, ESTADO, OBSERVACION
+        SELECT ID, ID_CAMPANA, USUARIO, TIPO_ACCESO, GERENTE, GERENTE_USUARIO, ESTADO, OBSERVACION, CONFIRMACION
           FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID = :p_id
     """), {"p_id": item_id}).mappings().first()
     if not row or row["id_campana"] != campaign["id"]:
@@ -416,12 +430,18 @@ def decide(db, *, item_id, decision, observation, user, accion="MODIFICACION_VAL
     is_admin = user.rol in ("administrador", "desarrollador")
     if not is_admin and (row["gerente_usuario"] or "").lower() != user.username.lower():
         raise HTTPException(403, "Solo el gerente a cargo puede confirmar esta cuenta")
-    db.execute(text("""
+    if is_answered(row["estado"], row["confirmacion"]):
+        raise AlreadyAnswered()
+    # Mantener / Eliminar confirman; Otro / No pertenece dejan la cuenta pendiente (reportada).
+    confirmacion = confirmation_for(estado)
+    updated = db.execute(text("""
         UPDATE AUTOM.SOX_C7_VPN_INTERNAS
-           SET ESTADO = :p_est, OBSERVACION = :p_obs, CONFIRMACION = 1, CONFIRMADO_POR = :p_user,
+           SET ESTADO = :p_est, OBSERVACION = :p_obs, CONFIRMACION = :p_conf, CONFIRMADO_POR = :p_user,
                FECHA_MODIFICACION = :p_now
-         WHERE ID = :p_id
-    """), {"p_est": estado, "p_obs": observation, "p_user": user.username, "p_now": datetime.utcnow(), "p_id": item_id})
+         WHERE ID = :p_id AND CONFIRMACION = 0 AND ESTADO NOT IN ('no pertenece', 'otro')
+    """), {"p_est": estado, "p_obs": observation, "p_conf": confirmacion, "p_user": user.username, "p_now": datetime.utcnow(), "p_id": item_id}).rowcount
+    if not updated:
+        raise AlreadyAnswered()  # Otra sesión la respondió mientras tanto.
     db.execute(text("""
         INSERT INTO AUTOM.SOX_C7_VPN_INTERNAS_LOG
           (INTERNA_ID, ID_CAMPANA, CUENTA, TIPO_ACCESO, GERENTE, ACCION, ESTADO_ANTERIOR, ESTADO_NUEVO,
@@ -434,7 +454,7 @@ def decide(db, *, item_id, decision, observation, user, accion="MODIFICACION_VAL
            "p_now": datetime.utcnow()})
     if commit:
         db.commit()
-    return {"id": item_id, "estado": estado, "confirmacion": 1}
+    return {"id": item_id, "estado": estado, "confirmacion": confirmacion}
 
 
 def confirm_all(db, *, items, user):
@@ -442,16 +462,21 @@ def confirm_all(db, *, items, user):
         raise HTTPException(422, "No hay cuentas para confirmar")
     if len(items) > 2000:
         raise HTTPException(422, "Demasiadas cuentas en una sola confirmación")
+    saved, skipped = [], []
     try:
         for item in items:
-            decide(db, item_id=item.id, decision=item.decision, observation=item.observation, user=user,
-                   accion="GUARDAR_MASIVO", commit=False)
+            try:
+                decide(db, item_id=item.id, decision=item.decision, observation=item.observation, user=user,
+                       accion="GUARDAR_MASIVO", commit=False)
+                saved.append(item.id)
+            except AlreadyAnswered:
+                skipped.append(item.id)
         db.commit()
     except Exception:
         db.rollback()
         raise
-    log(f"CONFIRMACION MASIVA | {user.username} confirmó {len(items)} cuenta(s)")
-    return {"confirmadas": len(items)}
+    log(f"GUARDADO MASIVO | {user.username}: {len(saved)} guardada(s), {len(skipped)} ya respondida(s)")
+    return {"guardadas": saved, "omitidas": skipped}
 
 
 # ---------------------------------------------------------------- gerente asignado a mano
@@ -559,7 +584,8 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
         for r in rows:
             db.execute(text("""
                 UPDATE AUTOM.SOX_C7_VPN_INTERNAS
-                   SET GERENTE = :p_ger, GERENTE_USUARIO = :p_user, GERENTE_CORREO = :p_mail, GERENTE_MANUAL = 1
+                   SET GERENTE = :p_ger, GERENTE_USUARIO = :p_user, GERENTE_CORREO = :p_mail, GERENTE_MANUAL = 1,
+                       ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMADO_POR = NULL
                  WHERE ID = :p_id
             """), {"p_ger": nombre, "p_user": usuario, "p_mail": correo, "p_id": r["id"]})
             before = f", antes {r['gerente']}" if r["gerente"] else ""
@@ -567,7 +593,7 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
                 INSERT INTO AUTOM.SOX_C7_VPN_INTERNAS_LOG
                   (INTERNA_ID, ID_CAMPANA, CUENTA, TIPO_ACCESO, GERENTE, ACCION, ESTADO_ANTERIOR, ESTADO_NUEVO,
                    OBSERVACION_ANTERIOR, OBSERVACION_NUEVA, USUARIO_SOX, FECHA)
-                VALUES (:p_id, :p_camp, :p_cuenta, :p_tipo, :p_ger, 'ASIGNACION MANUAL DE GERENTE', :p_est, :p_est,
+                VALUES (:p_id, :p_camp, :p_cuenta, :p_tipo, :p_ger, 'ASIGNACION MANUAL DE GERENTE', :p_est, 'mantener',
                         NULL, :p_obs, :p_admin, :p_now)
             """), {"p_id": r["id"], "p_camp": campaign["id"], "p_cuenta": r["usuario"], "p_tipo": r["tipo_acceso"],
                    "p_ger": nombre, "p_est": r["estado"], "p_admin": user.username, "p_now": now,

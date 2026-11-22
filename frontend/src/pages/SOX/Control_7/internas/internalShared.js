@@ -3,6 +3,9 @@
 export const DECISION_LABEL = { mantener: "Mantener", eliminar: "Eliminar", "no pertenece": "No pertenece", otro: "Otro" };
 export const ACCESS_LABEL = { RDP: "RDP", APLICACIONES: "Aplicaciones" };
 
+/** El gerente ya respondió: confirmada, o reportada (Otro / No pertenece, que sigue pendiente). */
+export const hasDecision = (item) => item.confirmacion === 1 || ["otro", "no pertenece"].includes(item.estado);
+
 /** Estado para StatusBadge: Sin Responsable, Confirmado, Vencido o Pendiente. */
 export function internalStatus(item, campaignExpired) {
   if (!item.gerente) return "Sin Responsable";
@@ -19,7 +22,7 @@ export const INTERNAL_CAMPAIGN_COLUMNS = [
   { header: "Acceso", value: (i) => text(ACCESS_LABEL[i.tipo_acceso]), width: 14 },
   { header: "Gerente", value: (i) => text(i.gerente), width: 30 },
   { header: "Confirmado", value: (i) => (i.confirmacion === 1 ? "Sí" : "No"), width: 12 },
-  { header: "Decisión", value: (i) => (i.confirmacion === 1 ? DECISION_LABEL[i.estado] : "-"), width: 14 },
+  { header: "Decisión", value: (i) => (hasDecision(i) ? DECISION_LABEL[i.estado] : "-"), width: 14 },
   { header: "Observación", value: (i) => text(i.observacion), width: 40 },
   { header: "Confirmó", value: (i) => text(i.confirmado_por), width: 16 },
   { header: "Última modificación", value: (i) => date(i.fecha_modificacion), width: 20 },

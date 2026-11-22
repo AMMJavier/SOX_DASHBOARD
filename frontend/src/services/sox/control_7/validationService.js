@@ -6,6 +6,11 @@ export async function getAllValidations() {
 }
 
 
+/** VPN externas del gerente en sesión. */
+export async function getMyValidations() {
+  return (await api.get("/sox/validations/mine")).data;
+}
+
 export async function getValidationsByManager(managerName) {
   const response = await api.get(
     `/sox/validations/manager/${encodeURIComponent(managerName)}`
@@ -15,7 +20,7 @@ export async function getValidationsByManager(managerName) {
 
 export async function updateValidation(checkpointUid, data){
   const response = await api.patch(
-    `/sox/validations/${checkpointUid}`,
+    `/sox/validations/${encodeURIComponent(checkpointUid)}`,
     data
   );
   return response.data;

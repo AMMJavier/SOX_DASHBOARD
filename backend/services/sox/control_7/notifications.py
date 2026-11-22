@@ -16,7 +16,6 @@ import re
 import subprocess
 import threading
 import time
-import unicodedata
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -25,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from services.sox.common import mail_config
 from services.sox.common import mail_service as mail
+from services.sox.control_7.decision_rules import REPORTED_SQL, manager_key
 
 logger = logging.getLogger(__name__)
 _batch_lock = threading.Lock()
@@ -65,14 +65,6 @@ def _resolve_contact(contacts, key):
 
 # ---------------------------------------------------------------- utilidades
 
-def manager_key(name):
-    """Normaliza como lo hace el Control 7 en Oracle: sin NBSP, espacios ni acentos, sin mayúsculas."""
-    value = (name or "").replace("\xa0", " ")
-    value = unicodedata.normalize("NFKD", value)
-    value = "".join(c for c in value if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", value).strip().casefold()
-
-
 def _key_hash(key):
     return sha256(key.encode("utf-8")).hexdigest()[:24]
 
@@ -92,10 +84,11 @@ def active_campaign(db):
 
 
 def _campaign_managers(db):
-    rows = db.execute(text("""
+    rows = db.execute(text(f"""
         SELECT GERENTE AS "gerente", COUNT(*) AS "vpn",
-               SUM(CASE WHEN NVL(CONFIRMACION, 0) = 1 THEN 1 ELSE 0 END) AS "confirmadas"
-          FROM (SELECT t.GERENTE, t.CONFIRMACION,
+               SUM(CASE WHEN NVL(CONFIRMACION, 0) = 1 AND NOT ({REPORTED_SQL}) THEN 1 ELSE 0 END) AS "confirmadas",
+               SUM(CASE WHEN {REPORTED_SQL} THEN 1 ELSE 0 END) AS "reportadas"
+          FROM (SELECT t.GERENTE, t.CONFIRMACION, t.ESTADO,
                        ROW_NUMBER() OVER (PARTITION BY t.CHECKPOINT_UID ORDER BY t.FECHA_ALMACENADO DESC) rn
                   FROM AUTOM.CHECKPOINT_TRANSFORM t)
          WHERE rn = 1
@@ -110,9 +103,10 @@ def _campaign_managers(db):
             without_manager += count
             continue
         item = managers.setdefault(key, {"key": key, "gerente": re.sub(r"\s+", " ", row["gerente"].replace("\xa0", " ")).strip(),
-                                         "vpn": 0, "confirmadas": 0})
+                                         "vpn": 0, "confirmadas": 0, "reportadas": 0})
         item["vpn"] += count
         item["confirmadas"] += int(row["confirmadas"] or 0)
+        item["reportadas"] += int(row["reportadas"] or 0)  # Otro / No pertenece: siguen pendientes
     return managers, without_manager, total
 
 

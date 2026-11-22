@@ -137,16 +137,21 @@ def draft_template(number) -> dict | None:
     return {"asunto": _text(data.get("asunto")), "cuerpo": _text(data.get("cuerpo"))}
 
 
+def _hour(value, name):
+    """8 (hora entera) o "09:15" (hora y minutos). Inválido -> 08:00."""
+    raw = str(value).strip()
+    match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?", raw)
+    hour, minute = (int(match.group(1)), int(match.group(2) or 0)) if match else (-1, 0)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        logger.error("%s inválida %r en correos.json (usar HH:MM); se usa 08:00", name, raw)
+        return 8, 0
+    return hour, minute
+
+
 def automatic() -> dict:
     """Envío automático de recordatorios y alertas (correos.json > automatico)."""
     data = load().get("automatico") or {}
-    # "hora_desde": 8 (hora entera) o "09:15" (hora y minutos). Inválido -> 08:00.
-    raw = str(data.get("hora_desde", 8)).strip()
-    match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?", raw)
-    hour, minute = (int(match.group(1)), int(match.group(2) or 0)) if match else (8, 0)
-    if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        logger.error("automatico.hora_desde inválida %r en correos.json (usar HH:MM); se usa 08:00", raw)
-        hour, minute = 8, 0
+    hour, minute = _hour(data.get("hora_desde", 8), "automatico.hora_desde")
     return {
         "activo": data.get("activo") is True,
         "hora_desde": f"{hour:02d}:{minute:02d}",
@@ -209,6 +214,25 @@ def c7_internal_notice() -> dict:
     es el mismo de aviso_gerentes. Sin textos, se usan los de internal_notifications.py."""
     data = control(7).get("aviso_gerentes_internas") or {}
     return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
+
+
+def c7_daily_reminder() -> dict:
+    """Recordatorio diario a gerentes con VPN por validar (controles.7.recordatorio_diario).
+
+    No envía nada si falta el bloque, si "activo" no es true o si automatico.activo es false.
+    El modo prueba y las copias son los de aviso_gerentes y del propio bloque ("copias").
+    """
+    data = control(7).get("recordatorio_diario") or {}
+    general = automatic()
+    hour, minute = _hour(data.get("hora_desde", general["hora_desde"]), "recordatorio_diario.hora_desde")
+    return {
+        "activo": data.get("activo") is True and general["activo"],
+        "hora_desde": f"{hour:02d}:{minute:02d}",
+        "minuto_del_dia": hour * 60 + minute,
+        "copias": _dedupe(_list(data.get("copias"))),
+        "asunto": data.get("asunto"),
+        "cuerpo": data.get("cuerpo"),
+    }
 
 
 def c7_notice() -> dict:

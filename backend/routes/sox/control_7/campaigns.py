@@ -5,6 +5,7 @@ from database.oracle_connection import OracleConnection
 from typing import Optional
 from checkpoint.sync_service import sync_checkpoint_oracle
 from datetime import datetime, timedelta
+from services.sox.control_7.decision_rules import is_confirmed
 
 
 # ==========================================================
@@ -396,7 +397,8 @@ def start_campaign():
 
          
 
-        # 4. Crear nueva campaña
+        # 4. Crear nueva campaña. La fecha de vencimiento (15 días calendario) solo se fija aquí:
+        # "Actualizar campaña" (/campaign/sync) no la cambia.
         cursor.execute("""
             INSERT INTO AUTOM.CAMPANAS_SOX
             (
@@ -415,8 +417,6 @@ def start_campaign():
                 :semestre,
                 SYSDATE,
                 TO_DATE(:fecha_fin,'DD-MM-YYYY'),
-                -- Fecha de vencimiento: 15 días calendario desde el inicio. Solo se fija aquí;
-                -- "Actualizar campaña" (/campaign/sync) no la cambia.
                 SYSDATE + 15,
                 'ACTIVA'
             )
@@ -753,9 +753,8 @@ def get_campaign_validations(
             CONFIRMACION,
             FECHA_ALMACENADO,
             FECHA_MODIFICACION,
-            -- Fecha de vencimiento: la de la campaña activa (fijada al iniciarla).
-            NVL(FECHA_LIMITE, (SELECT MAX(c.FECHA_LIMITE) FROM AUTOM.CAMPANAS_SOX c
-                                WHERE c.ESTADO = 'ACTIVA')) AS FECHA_LIMITE
+            (SELECT MAX(c.FECHA_LIMITE) FROM AUTOM.CAMPANAS_SOX c
+              WHERE c.ESTADO = 'ACTIVA') AS FECHA_LIMITE
         FROM
         (
             SELECT t.*,
@@ -841,7 +840,7 @@ def get_campaign_validations(
                     item["observacion"] or "",
 
                 "confirmed":
-                    item["confirmacion"],
+                    1 if is_confirmed(item["estado"], item["confirmacion"]) else 0,
 
                 "date":
                     item["fecha_almacenado"],
