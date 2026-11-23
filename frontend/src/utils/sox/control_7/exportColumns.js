@@ -13,8 +13,9 @@ export const CAMPAIGN_COLUMNS = [
   { header: "Nombre VPN", value: (i) => text(i.nombre_vpn), width: 34 },
   { header: "Solicitante", value: (i) => text(i.solicitante), width: 28 },
   { header: "Gerente", value: (i) => text(i.manager), width: 30 },
-  { header: "Decisión", value: (i) => text(i.status), width: 14 },
   { header: "Confirmado", value: (i) => (i.confirmed === 1 ? "Sí" : "No"), width: 12 },
+  // Decisión solo si el gerente respondió (confirmada, u Otro / No pertenece pendiente de revisión).
+  { header: "Decisión", value: (i) => (i.confirmed === 1 || ["otro", "no pertenece"].includes(String(i.status || "").trim().toLowerCase()) ? text(i.status) : "-"), width: 14 },
   { header: "Observación", value: (i) => text(i.observation), width: 44 },
   { header: "Fecha vencimiento", value: (i) => date(i.fecha_limite), width: 20 },
   { header: "Última modificación", value: (i) => date(i.fecha_modificacion), width: 20 },

@@ -9,16 +9,23 @@ import { CAMPAIGN_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
 import { registerExport } from "../../../utils/sox/control_7/registerExport";
 import { closeActiveCampaign, getCampaignValidations } from "../../../services/sox/control_7/campaignService";
 import CampaignNotifications from "../../../components/SOX/control_7/CampaignNotifications";
+
+// Mismo formato que la campaña de VPN internas: Estado (semáforo) y Decisión por separado.
+const DECISION_LABEL = { mantener: "Mantener", eliminar: "Eliminar", "no pertenece": "No pertenece", otro: "Otro" };
+const decisionKey = (item) => String(item.status || "").trim().toLowerCase();
+const isReported = (item) => ["otro", "no pertenece"].includes(decisionKey(item));
+/** El gerente ya respondió: confirmada, o reportada (Otro / No pertenece, que sigue pendiente). */
+const hasDecision = (item) => item.confirmed === 1 || isReported(item);
+const STATUSES = ["Pendiente", "Confirmado", "Vencido", "Sin Responsable"];
 export default function Campaigns() {
   const [validations, setValidations] = useState([]);
   const [search, setSearch] = useState("");
 
 const [selectedManager, setSelectedManager] = useState("");
 const [selectedStatus, setSelectedStatus] = useState("");
-const [selectedValidity, setSelectedValidity] = useState("");
+const [selectedDecision, setSelectedDecision] = useState("");
 
 const [managers, setManagers] = useState([]);
-const [statuses, setStatuses] = useState([]);
 const [currentPage, setCurrentPage] = useState(1);
 const rowsPerPage = 80;
 
@@ -29,11 +36,11 @@ const rowsPerPage = 80;
 
   async function loadValidations() {
     const response = await getCampaignValidations();
-    
+
     const data = Array.isArray(response)
         ? response
         : response.data || [];
-    
+
     setValidations(data);
   }
 
@@ -42,7 +49,6 @@ const rowsPerPage = 80;
         "/sox/campaign/validation-filters"
     );
     setManagers(response.data.managers);
-    setStatuses(response.data.statuses);
 }
 
   const handleCloseCampaign = async () => {
@@ -54,7 +60,7 @@ const rowsPerPage = 80;
 
     try {
       await closeActiveCampaign({
-        
+
       });
 
       alert("Campaña cerrada correctamente.");
@@ -70,8 +76,8 @@ const rowsPerPage = 80;
       ${item.req}
       ${item.nombre_vpn}
       ${item.manager}
-      ${item.status}
-      ${item.observacion}
+      ${item.solicitante}
+      ${item.observation}
     `.toLowerCase();
 
     return (
@@ -84,12 +90,12 @@ const rowsPerPage = 80;
     &&
     (
         !selectedStatus ||
-        item.status === selectedStatus
+        externalStatus(item) === selectedStatus
     )
     &&
     (
-      !selectedValidity ||
-      getValidityStatus(item) === selectedValidity
+      !selectedDecision ||
+      (hasDecision(item) && decisionKey(item) === selectedDecision)
     )
   );
   });
@@ -116,6 +122,15 @@ function getValidityStatus(item){
     return "En plazo";
 }
 
+/** Estado para StatusBadge: Sin Responsable, Confirmado, Vencido o Pendiente (igual que internas). */
+function externalStatus(item){
+    if (!item.manager) return "Sin Responsable";
+    if (item.confirmed === 1) return "Confirmado";
+    return getValidityStatus(item) === "Vencida" ? "Vencido" : "Pendiente";
+}
+
+const resetPage = (setter) => (e) => { setter(e.target.value); setCurrentPage(1); };
+
 return (
     <div>
       <h1 className="text-2xl font-bold">Campañas SOX</h1>
@@ -141,7 +156,7 @@ return (
 
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={resetPage(setSearch)}
                 className="w-full border-none bg-transparent text-sm outline-none"
                 placeholder="Buscar por VPN, solicitante, REQ o gerente..."
               />
@@ -191,76 +206,18 @@ return (
         </div>
       </div>
       <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-         <select
-            value={selectedManager}
-            onChange={(e)=>setSelectedManager(e.target.value)}
-            className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm"
-          >
-
-            <option value="">
-              Todos los gerentes
-            </option>
-
-            {
-              managers.map((manager)=>(
-                <option
-                  key={manager}
-                  value={manager}
-                >
-                  {manager}
-                </option>
-              ))
-            }
-
-          </select>
-
-
-
-          <select
-            value={selectedStatus}
-            onChange={(e)=>setSelectedStatus(e.target.value)}
-            className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm"
-          >
-
-            <option value="">
-              Todos los estados
-            </option>
-
-            {
-              statuses.map((status)=>(
-                <option
-                  key={status}
-                  value={status}
-                >
-                  {status}
-                </option>
-              ))
-            }
-
-          </select>
-
-
-
-          <select
-            value={selectedValidity}
-            onChange={(e)=>setSelectedValidity(e.target.value)}
-            className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm"
-          >
-
-            <option value="">
-              Todos los vencimientos
-            </option>
-
-            <option value="En plazo">
-              En plazo
-            </option>
-
-            <option value="Vencida">
-              Vencidas
-            </option>
-
-          </select>
-
+        <select value={selectedManager} onChange={resetPage(setSelectedManager)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <option value="">Todos los gerentes</option>
+          {managers.map((manager) => <option key={manager} value={manager}>{manager}</option>)}
+        </select>
+        <select value={selectedStatus} onChange={resetPage(setSelectedStatus)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <option value="">Todos los estados</option>
+          {STATUSES.map((status) => <option key={status}>{status}</option>)}
+        </select>
+        <select value={selectedDecision} onChange={resetPage(setSelectedDecision)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <option value="">Todas las decisiones</option>
+          {Object.entries(DECISION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
       </div>
 
 
@@ -272,7 +229,7 @@ return (
               <th className="border-b p-4">Solicitante</th>
               <th className="border-b p-4">Gerente Asignado</th>
               <th className="border-b p-4">Estado</th>
-              <th className="border-b p-4">Confirmación</th>
+              <th className="border-b p-4">Decisión</th>
               <th className="border-b p-4">Observación</th>
               <th className="border-b p-4">Fecha VPN</th>
               <th className="border-b p-4">Fecha Vencimiento</th>
@@ -300,13 +257,11 @@ return (
                 </td>
 
                 <td className="border-b p-4">
-                  <StatusBadge status={item.status}/>
+                  <StatusBadge status={externalStatus(item)}/>
                 </td>
 
                 <td className="border-b p-4">
-                  {item.confirmed === 1 
-                    ? "Confirmado" 
-                    : "Pendiente"}
+                  {hasDecision(item) ? DECISION_LABEL[decisionKey(item)] || item.status : "-"}
                 </td>
 
                 <td className="border-b p-4">
@@ -327,7 +282,7 @@ return (
                   {item.fecha_modificacion || "-"}
                 </td>
 
-                
+
               </tr>
             ))}
           </tbody>

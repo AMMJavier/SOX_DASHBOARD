@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Mail, RefreshCw, Send } from "lucide-react";
+import { Mail, RefreshCw, Search, Send } from "lucide-react";
 import { readStoredUser } from "../../../services/authSession";
 import { getCampaignNotifications, sendCampaignNotifications } from "../../../services/sox/control_7/campaignService";
 import { formatDateTime } from "../../../utils/dateTime";
@@ -18,6 +18,7 @@ const NOTIFICATION = {
 };
 // Gerentes por página en "Ver detalles gerentes - envío individual".
 const PAGE_SIZE = 10;
+const plain = (v) => String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const errorText = (e) => e?.response?.data?.detail || e?.message || "Error inesperado";
 
 function Kpi({ label, value, tone = "text-slate-900" }) {
@@ -45,6 +46,7 @@ export default function CampaignNotifications({
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [managerFilter, setManagerFilter] = useState("");
+  const [managerText, setManagerText] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,9 +68,12 @@ export default function CampaignNotifications({
 
   const summary = data?.resumen;
   const pending = (data?.gerentes || []).filter((x) => x.enviable);
-  // Filtro por gerente del detalle (si el gerente ya no está tras actualizar, se muestran todos).
-  const filtered = (data?.gerentes || []).filter((g) => g.clave === managerFilter);
-  const shownManagers = managerFilter && filtered.length ? filtered : (data?.gerentes || []);
+  // Filtros del detalle: lista de gerentes y/o texto (nombre o correo, sin importar acentos).
+  // Si el gerente elegido ya no está tras actualizar, la lista no filtra.
+  const all = data?.gerentes || [];
+  const byList = all.some((g) => g.clave === managerFilter) ? all.filter((g) => g.clave === managerFilter) : all;
+  const words = plain(managerText).split(/\s+/).filter(Boolean);
+  const shownManagers = byList.filter((g) => words.every((w) => plain(`${g.gerente} ${g.correo || ""}`).includes(w)));
 
   async function send(claves = null) {
     const total = claves ? claves.length : pending.length;
@@ -119,12 +124,25 @@ export default function CampaignNotifications({
         <button type="button" onClick={() => setOpen((v) => !v)} className="text-sm font-semibold text-blue-700 hover:underline">
           {open ? "Ocultar detalles gerentes - envío individual" : "Ver detalles gerentes - envío individual"}
         </button>
-        {open && <select value={managerFilter} onChange={(e) => { setManagerFilter(e.target.value); setPage(1); }}
-          className="mt-3 block h-11 w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 text-sm">
-          <option value="">Todos los gerentes ({data.gerentes.length})</option>
-          {[...data.gerentes].sort((a, b) => String(a.gerente).localeCompare(String(b.gerente)))
-            .map((g) => <option key={g.clave} value={g.clave}>{g.gerente}</option>)}
-        </select>}
+        {open && <div className="mt-3 flex flex-wrap items-center gap-3">
+          <select value={managerFilter} onChange={(e) => { setManagerFilter(e.target.value); setPage(1); }}
+            aria-label="Elegir gerente" className="h-11 w-full max-w-md rounded-lg border border-slate-300 bg-white px-3 text-sm">
+            <option value="">Todos los gerentes ({data.gerentes.length})</option>
+            {[...data.gerentes].sort((a, b) => String(a.gerente).localeCompare(String(b.gerente)))
+              .map((g) => <option key={g.clave} value={g.clave}>{g.gerente}</option>)}
+          </select>
+          <div className="flex h-11 w-full max-w-md items-center gap-2 rounded-lg border border-slate-300 bg-white px-3">
+            <Search size={16} className="shrink-0 text-slate-500"/>
+            <input value={managerText} onChange={(e) => { setManagerText(e.target.value); setPage(1); }}
+              aria-label="Buscar gerente por nombre o correo" placeholder="Escribe el nombre o correo del gerente..."
+              className="w-full border-none bg-transparent text-sm outline-none"/>
+          </div>
+          {(managerFilter || managerText) && <>
+            <span className="text-sm text-slate-500">{shownManagers.length} de {data.gerentes.length}</span>
+            <button type="button" onClick={() => { setManagerFilter(""); setManagerText(""); setPage(1); }}
+              className="text-sm font-semibold text-blue-700 hover:underline">Limpiar</button>
+          </>}
+        </div>}
         {open && <div className="mt-3 overflow-x-auto"><table className="w-full border-collapse text-sm">
           <thead><tr className="bg-slate-50 text-left">
             <th className="border-b p-3">Gerente</th><th className="border-b p-3">{itemLabel} (pendientes)</th><th className="border-b p-3">Correo</th>
@@ -146,7 +164,8 @@ export default function CampaignNotifications({
                 onClick={() => send([g.clave])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50">
                 {g.notificacion === "FALLIDO" ? "Reintentar" : "Enviar"}</button>}</td>
             </tr>;
-          })}</tbody>
+          })}
+          {shownManagers.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-500">Ningún gerente coincide con la búsqueda.</td></tr>}</tbody>
         </table>
           <Pagination currentPage={page} totalPages={Math.ceil(shownManagers.length / PAGE_SIZE)} onPageChange={setPage}/>
         </div>}
