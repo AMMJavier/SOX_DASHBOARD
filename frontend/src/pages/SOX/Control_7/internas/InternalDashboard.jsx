@@ -49,6 +49,8 @@ export default function InternalDashboard() {
           <div className="mt-2 space-y-1">
             <div className="flex items-baseline justify-between gap-3"><span className="text-sm font-semibold text-slate-600">RDP</span><span className="text-2xl font-bold">{k.rdp || 0}</span></div>
             <div className="flex items-baseline justify-between gap-3 border-t border-slate-100 pt-1"><span className="text-sm font-semibold text-slate-600">Aplicaciones</span><span className="text-2xl font-bold">{k.aplicaciones || 0}</span></div>
+            {/* Suma: debe coincidir con "Total Registros". */}
+            <div className="flex items-baseline justify-between gap-3 border-t-2 border-slate-300 pt-1"><span className="text-sm font-bold text-slate-800">Total</span><span className="text-2xl font-bold text-indigo-700">{(k.rdp || 0) + (k.aplicaciones || 0)}</span></div>
           </div>
         </Kpi>
       </div>
