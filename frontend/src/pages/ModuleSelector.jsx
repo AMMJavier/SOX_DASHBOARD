@@ -22,7 +22,7 @@ const modules = [
   },
   {
     id: "assets",
-    title: "Control de activos",
+    title: "Inventario",
     description:
       "Inventario centralizado de equipos, responsables, ubicaciones y estados.",
     icon: Boxes,
@@ -32,7 +32,7 @@ const modules = [
   },
   {
     id: "network",
-    title: "Activos de red",
+    title: "Activos en red",
     description:
       "Control de routers, switches, firewalls, enlaces y dispositivos de red.",
     icon: Network,
