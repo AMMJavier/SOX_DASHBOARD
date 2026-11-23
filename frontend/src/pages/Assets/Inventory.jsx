@@ -13,6 +13,8 @@ import {
   Pencil,
   Save,
   CheckCircle2,
+  Layers,
+  Cloud,
 } from "lucide-react";
 
 import { getInventory, getInventoryOptions, updateInventoryDevice } from "../../services/assets/catalog";
@@ -64,6 +66,7 @@ export default function Inventory() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
+  const [summary, setSummary] = useState(null);
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -114,12 +117,14 @@ export default function Inventory() {
         const count = Array.isArray(data) ? data.length : Number(data.pagination?.total ?? 0);
         setRecords(list);
         setTotal(count);
+        setSummary(data.resumen ?? null);
         setPages(Math.max(1, Number(data.pagination?.total_pages ?? Math.ceil(count / PAGE_SIZE))));
       } catch (err) {
         if (active) {
           setError(err.message || "No fue posible cargar el inventario.");
           setRecords([]);
           setTotal(0);
+          setSummary(null);
           setPages(1);
         }
       } finally {
@@ -236,42 +241,24 @@ export default function Inventory() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white">
-            <Database size={24} />
+      {/* Inventario total y su desglose por infraestructura (siguen los filtros aplicados). */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Inventario total", value: total, icon: Database, color: "bg-blue-600" },
+          { label: "Hardware Físico", value: summary?.fisico, icon: HardDrive, color: "bg-emerald-600" },
+          { label: "Hardware Virtual", value: summary?.virtual, icon: Layers, color: "bg-violet-600" },
+          { label: "Suscripciones", value: summary?.suscripciones, icon: Cloud, color: "bg-sky-500" },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full ${color} text-white`}>
+              <Icon size={24} />
+            </div>
+            <p className="text-sm font-medium text-slate-600">{label}</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900">
+              {value == null ? "—" : Number(value).toLocaleString("es-EC")}
+            </p>
           </div>
-          <p className="text-sm font-medium text-slate-600">
-            Dispositivos encontrados
-          </p>
-          <p className="mt-1 text-3xl font-bold text-slate-900">
-            {total.toLocaleString("es-EC")}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-violet-600 text-white">
-            <Boxes size={24} />
-          </div>
-          <p className="text-sm font-medium text-slate-600">
-            Registros en esta página
-          </p>
-          <p className="mt-1 text-3xl font-bold text-slate-900">
-            {records.length}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white">
-            <HardDrive size={24} />
-          </div>
-          <p className="text-sm font-medium text-slate-600">
-            Página actual
-          </p>
-          <p className="mt-1 text-3xl font-bold text-slate-900">
-            {page} / {pages}
-          </p>
-        </div>
+        ))}
       </div>
 
       <form onSubmit={submitSearch} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

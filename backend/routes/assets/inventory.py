@@ -113,9 +113,16 @@ def get_inventory(
     offset = (page - 1) * page_size
 
     try:
-        total = int(db.execute(
-            text(f"SELECT COUNT(*) FROM {TABLE}{where_sql}"), params
-        ).scalar() or 0)
+        # Total y desglose por infraestructura con los mismos filtros, en una sola consulta.
+        infra = "UPPER(TRIM(COALESCE(infraestructura, '')))"
+        counts = db.execute(text(f"""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE {infra} LIKE 'F_SIC%') AS fisico,
+                   COUNT(*) FILTER (WHERE {infra} LIKE '%VIRTUAL%') AS virtual,
+                   COUNT(*) FILTER (WHERE {infra} LIKE '%CLOUD%') AS cloud
+            FROM {TABLE}{where_sql}
+        """), params).mappings().first() or {}
+        total = int(counts.get("total") or 0)
         rows = db.execute(
             text(f"""
                 SELECT {SELECT_COLUMNS}
@@ -133,6 +140,13 @@ def get_inventory(
                 "page_size": page_size,
                 "total": total,
                 "total_pages": (total + page_size - 1) // page_size,
+            },
+            # Hardware físico (Fisica/Física), hardware virtual (Virtual) y suscripciones (Cloud).
+            "resumen": {
+                "total": total,
+                "fisico": int(counts.get("fisico") or 0),
+                "virtual": int(counts.get("virtual") or 0),
+                "suscripciones": int(counts.get("cloud") or 0),
             },
         }
     except SQLAlchemyError as exc:
