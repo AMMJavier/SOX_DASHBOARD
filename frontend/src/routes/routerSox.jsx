@@ -25,6 +25,9 @@ import InternalCampaign from "../pages/SOX/Control_7/internas/InternalCampaign";
 import InternalHistory from "../pages/SOX/Control_7/internas/InternalHistory";
 import InternalAuditLog from "../pages/SOX/Control_7/internas/InternalAuditLog";
 
+// Resumen general SOX (inicio del portal SOX para administración)
+import Overview from "../pages/SOX/Overview";
+
 // Configuración SOX
 import Users from "../pages/Admin/Users";
 
@@ -51,6 +54,11 @@ export const soxRoutes = (
   <>
     {/* Rutas antiguas: ahora viven dentro del layout del Control 7 (con sidebar). */}
     <Route path="/admin/users" element={<Navigate to="/SOX/Controls/Control_7/users" replace />} />
+
+    {/* RESUMEN GENERAL: estado de todos los controles */}
+    <Route path="/SOX" element={<ProtectedSoxLayout />}>
+      <Route path="resumen" element={<Overview />} />
+    </Route>
 
     {/* CONTROL 1 */}
     <Route

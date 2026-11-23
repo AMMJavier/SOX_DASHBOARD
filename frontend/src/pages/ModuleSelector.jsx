@@ -16,7 +16,7 @@ const modules = [
     description:
       "Administración de campañas, validaciones VPN, REQ, responsables e histórico.",
     icon: ShieldCheck,
-    path: "/SOX/Controls/Control_7/dashboard",
+    path: "/SOX/resumen",
     enabled: true,
     color: "bg-blue-600",
   },
@@ -66,9 +66,13 @@ export default function ModuleSelector() {
 
       if (
         loggedUser?.rol === "administrador" ||
-        loggedUser?.rol === "desarrollador" ||
-        loggedUser?.rol === "gerencial"
+        loggedUser?.rol === "desarrollador"
       ) {
+        // Administración: primero el resumen general de todos los controles.
+        navigate("/SOX/resumen");
+        return;
+      }
+      if (loggedUser?.rol === "gerencial") {
         navigate("/SOX/Controls/Control_7/dashboard");
         return;
       }

@@ -22,6 +22,7 @@ from routes.sox.common.reminders import router as controls_reminders_router
 from routes.sox.common.mail import router as controls_mail_router
 from routes.sox.control_7.ldap_vpn import router as internal_vpn_ldap_router
 from routes.sox.control_6.cortes import router as controls_c6_cortes_router
+from routes.sox.common.overview import router as overview_router
 # ==========================================================
 # CONFIGURACIÓN DEL ROUTER SOX
 # ==========================================================
@@ -50,3 +51,4 @@ router.include_router(controls_reminders_router)
 router.include_router(controls_mail_router)
 router.include_router(internal_vpn_ldap_router)
 router.include_router(controls_c6_cortes_router)
+router.include_router(overview_router)

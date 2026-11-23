@@ -1,4 +1,4 @@
-import { Database, Download, FileText, Home, LayoutGrid, ScrollText, Shield } from "lucide-react";
+import { Database, Download, FileText, Gauge, Home, LayoutGrid, ScrollText, Shield } from "lucide-react";
 import VpnScopeSwitch, { INTERNAL_PATH } from "../control_7/VpnScopeSwitch";
 
 /** Opciones del Control 7 en modo "VPN internas" (mismo orden que en externas). */
@@ -33,6 +33,7 @@ export default function Sidebar() {
   const dashboard = controlConfig[id]?.path || "/SOX/Controls/Control_7/dashboard";
   const documental = ["1", "2", "3", "5", "6"].includes(id);
   // Control 7: "Internas" muestra solo la sección de VPN internas; "Externas", lo de siempre.
+  const overview = pathname.toLowerCase() === "/sox/resumen";
   const internal = id === "7" && pathname.toLowerCase().startsWith(INTERNAL_PATH.toLowerCase());
   return (
     <aside className="fixed left-0 top-0 hidden h-screen w-64 overflow-y-auto bg-gradient-to-b from-slate-950 to-slate-900 p-5 text-white lg:block">
@@ -42,9 +43,10 @@ export default function Sidebar() {
       </div>
       <nav className="space-y-1.5" aria-label="Navegación del módulo SOX">
         {role !== "gerencial" && <SidebarItem to="/modules" icon={LayoutGrid} label="Portal de módulos" active={pathname === "/modules"}/>}
+        {["administrador", "desarrollador"].includes(role) && <SidebarItem to="/SOX/resumen" icon={Gauge} label="Resumen general" active={overview}/>}
         {/* El gerente valida externas e internas en la misma página: sin selector. */}
         {id === "7" && role !== "gerencial" && <VpnScopeSwitch internal={internal}/>}
-        {internal
+        {overview ? null : internal
           ? <Control7InternalSidebar role={role} pathname={pathname}/>
           : <>
             {!documental && <SidebarItem to={dashboard} icon={Home} label="Dashboard"
