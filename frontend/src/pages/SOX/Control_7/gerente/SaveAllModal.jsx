@@ -13,7 +13,7 @@ export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfir
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label="Guardado masivo">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-start justify-between gap-4">
-          <h3 className="flex items-center gap-2 text-lg font-bold"><AlertTriangle size={20} className="text-amber-500"/>Guardar todas</h3>
+          <h3 className="flex items-center gap-2 text-lg font-bold"><AlertTriangle size={20} className="text-amber-500"/>{canSave ? "¿Realmente desea guardar todas las decisiones?" : "Guardar todas"}</h3>
           <button type="button" onClick={onClose} disabled={busy} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><X size={20}/></button>
         </div>
 
@@ -39,14 +39,14 @@ export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfir
 
           {canSave && reported > 0 && <p className="rounded-lg bg-slate-50 p-3">
             {reported} con <b>Otro</b> o <b>No pertenece</b> quedarán pendientes hasta que el administrador las revise.</p>}
-          {canSave && <p className="text-slate-500">Una vez guardadas, las decisiones no se pueden cambiar.</p>}
+          {canSave && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">Una vez guardadas, las decisiones no se pueden cambiar. Revise antes de confirmar.</p>}
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
           <button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-lg border border-slate-300 px-5 text-sm font-bold">{canSave ? "Cancelar" : "Entendido"}</button>
           {canSave && <button type="button" onClick={onConfirm} disabled={busy}
             className="flex h-11 items-center gap-2 rounded-lg bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">
-            <Save size={16}/>{busy ? "Guardando..." : "Guardar"}</button>}
+            <Save size={16}/>{busy ? "Guardando..." : "Sí, guardar"}</button>}
         </div>
       </div>
     </div>
