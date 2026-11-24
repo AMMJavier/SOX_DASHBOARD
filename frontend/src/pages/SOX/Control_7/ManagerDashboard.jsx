@@ -63,6 +63,9 @@ export default function ManagerDashboard() {
   const allSaved = KEYS.every((k) => !boxes[k].loading && !boxes[k].error)
     && KEYS.every((k) => !boxes[k].rows.some((r) => r.status === PENDING));
 
+  // Un cuadro sin VPN asignadas no se muestra (mientras carga o si falló, sí).
+  const shown = (key) => boxes[key].loading || !!boxes[key].error || boxes[key].rows.length > 0;
+
   const change = (key) => (id, field, value) => setRows(key, (rows) => rows.map((r) => (
     r.id !== id ? r : { ...r, [field]: value, ...(field === "decision" && value !== "Otro" ? { observation: "" } : {}) })));
   const touch = (key) => () => setTouched((t) => (t[key] ? t : { ...t, [key]: true }));
@@ -116,7 +119,7 @@ export default function ManagerDashboard() {
       <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h3 className="text-base font-bold text-amber-800">Instrucciones para la validación</h3>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-700">
-          <li>Solo ves las VPN asignadas a tu usuario: primero las <b>externas</b> y más abajo las <b>internas</b>.</li>
+          <li>Solo ves las VPN asignadas a tu usuario: las <b className="text-sky-700">externas</b> en el cuadro azul y las <b className="text-violet-700">internas</b> en el cuadro violeta.</li>
           <li>En la columna <b>Decisión</b>, seleccione una opción: Mantener, Eliminar u Otro.</li>
           <li>Con la opción <b>Otro</b>, el campo <b>Observación</b> se pone en blanco: escriba el motivo (es obligatorio).</li>
           <li>Con <b>Otro</b> la VPN queda <b>pendiente</b> hasta que el administrador la revise.</li>
@@ -134,13 +137,16 @@ export default function ManagerDashboard() {
       </div>}
       {campaign && !campaign.active && <p className="mt-6 rounded-2xl bg-amber-50 p-5 text-sm text-amber-800">No hay una campaña activa.</p>}
 
-      <VpnBox title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
+      {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
         expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes VPN externas asignadas a tu usuario en esta campaña."
-        onChange={change("externas")} onSave={saveOne("externas")} onTouch={touch("externas")}/>
+        onChange={change("externas")} onSave={saveOne("externas")} onTouch={touch("externas")}/>}
 
-      <VpnBox title="VPN Internas" headers={["Cuenta", "Nombre", "Acceso"]} {...boxes.internas}
+      {shown("internas") && <VpnBox tone="internas" title="VPN Internas" headers={["Cuenta", "Nombre", "Acceso"]} {...boxes.internas}
         expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes cuentas con VPN interna a cargo en esta campaña."
-        onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
+        onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>}
+
+      {!KEYS.some(shown) && <p className="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
+        No tienes VPN externas ni internas asignadas a tu usuario en esta campaña.</p>}
 
       <div className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
         <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">

@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { Lock, Save } from "lucide-react";
+import { Globe, Lock, Network, Save } from "lucide-react";
 import Pagination from "../../../../components/common/Pagination";
 import { CONFIRMED, DECISIONS, PENDING, REPORTED, summarize } from "./vpnRows";
 
 const ROWS_PER_PAGE = 30;
-const TH = "border-b border-slate-200 p-4";
+const TH = "border-b p-4";
+// Color de cada cuadro para distinguir externas (azul) de internas (violeta).
+const TONES = {
+  externas: {
+    Icon: Globe, label: "Externa", section: "border-sky-200 border-l-sky-500", badge: "bg-sky-100 text-sky-700",
+    title: "text-sky-900", head: "bg-sky-50 text-sky-900 [&_th]:border-sky-200", hover: "hover:bg-sky-50/60",
+  },
+  internas: {
+    Icon: Network, label: "Interna", section: "border-violet-200 border-l-violet-500", badge: "bg-violet-100 text-violet-700",
+    title: "text-violet-900", head: "bg-violet-50 text-violet-900 [&_th]:border-violet-200", hover: "hover:bg-violet-50/60",
+  },
+};
 const TD = "border-b border-slate-100 p-4";
 
 function Status({ status }) {
@@ -14,7 +25,7 @@ function Status({ status }) {
 }
 
 /** Cuadro de VPN del gerente (externas o internas). Lo guardado queda bloqueado. */
-export default function VpnBox({ title, headers, rows, loading, error, expired, busy, emptyText, deadline, onChange, onSave, onTouch }) {
+export default function VpnBox({ tone, title, headers, rows, loading, error, expired, busy, emptyText, deadline, onChange, onSave, onTouch }) {
   const [page, setPage] = useState(1);
   const pages = Math.ceil(rows.length / ROWS_PER_PAGE);
   const current = Math.min(page, Math.max(pages, 1));
@@ -25,11 +36,17 @@ export default function VpnBox({ title, headers, rows, loading, error, expired, 
 
   // Cualquier clic o cambio dentro del cuadro cuenta como interacción, salvo el botón individual.
   const touch = (e) => { if (!e.target.closest("[data-individual]")) onTouch(); };
+  const t = TONES[tone];
+  const Icon = t.Icon;
 
   return (
-    <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" onClickCapture={touch} onChangeCapture={touch}>
+    <section className={`mt-6 rounded-2xl border border-l-[6px] bg-white p-6 shadow-sm ${t.section}`} onClickCapture={touch} onChangeCapture={touch}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-bold">{title}</h3>
+        <h3 className={`flex items-center gap-3 text-lg font-bold ${t.title}`}>
+          <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${t.badge}`}><Icon size={18}/></span>
+          {title}
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${t.badge}`}>{t.label}</span>
+        </h3>
         {rows.length > 0 && <p className="text-sm text-slate-500">
           <b className="text-slate-800">{rows.length}</b> en total · <b className="text-emerald-700">{confirmed}</b> confirmadas ·{" "}
           <b className="text-amber-700">{pending}</b> por validar{reported > 0 && <> · <b className="text-slate-700">{reported}</b> en revisión</>}
@@ -41,7 +58,7 @@ export default function VpnBox({ title, headers, rows, loading, error, expired, 
         : rows.length === 0 ? <p className="rounded-xl bg-slate-50 p-8 text-center text-slate-500">{emptyText}</p>
         : <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] border-collapse text-sm">
-            <thead><tr className="bg-slate-50 text-left">
+            <thead><tr className={`text-left ${t.head}`}>
               {[...headers, "Decisión", "Observación", "Confirmación", "Fecha Límite", "Guardar"].map((h) => <th key={h} className={TH}>{h}</th>)}
             </tr></thead>
             <tbody>{visible.map((r) => {
@@ -49,7 +66,7 @@ export default function VpnBox({ title, headers, rows, loading, error, expired, 
               const other = r.decision === "Otro";
               const writing = other && !locked; // "Otro" sin guardar: el cuadro se pone blanco para escribir
               return (
-                <tr key={r.id} className="hover:bg-slate-50">
+                <tr key={r.id} className={t.hover}>
                   {r.cells.map((value, i) => <td key={headers[i]} className={`${TD} ${i === 0 ? "font-semibold" : ""}`}>{value}
                     {i === 1 && r.note && <p className="text-xs text-red-600">{r.note}</p>}</td>)}
                   <td className={TD}>
