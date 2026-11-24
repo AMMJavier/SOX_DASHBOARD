@@ -98,9 +98,8 @@ function ControlCard({ c, onOpen }) {
             tone={c.notificacion?.enviada ? "ok" : "warn"}/>
           <Row icon={FileText} label="Correo formal" value={c.correo_formal ? (c.correo_formal.enviado ? `Enviado · ${sentDay(c.correo_formal.fecha)}` : `No enviado (${c.correo_formal.estado})`) : "No enviado"}
             tone={c.correo_formal?.enviado ? "ok" : "none"}/>
-          {[1, 2, 3].includes(c.control) && confirmationRow(c)}
+          {[1, 2, 3, 5].includes(c.control) && confirmationRow(c)}
           <Row icon={CheckCircle2} label="Evidencias del período" value={c.evidencias} tone={c.evidencias ? "ok" : "warn"}/>
-          {c.control === 5 && <Row icon={Users} label="Eventos registrados en el año" value={c.eventos}/>}
           {c.control === 6 && <Row icon={Users} label="Conciliación del semestre"
             value={c.conciliacion ? `${sentDay(c.conciliacion.fecha)} · ${c.conciliacion.coincidencias} coincidencia(s)` : "Sin conciliación"}
             tone={c.conciliacion ? "ok" : "warn"}/>}

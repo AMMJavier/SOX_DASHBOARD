@@ -29,6 +29,13 @@
       "formato_archivo": "pdf",
       "tipo_evidencia_notificacion": "avance",
       "respuestas": { "activo": true, "tipo_evidencia": "aprobacion" }
+    },
+    "5": {
+      "codigo": "005",
+      "formato_archivo": "pdf",
+      "_info": "Correo del Líder de Seguridad Operativa y Redes al Jefe de Seguridad Operacional y Redes con la lista de administradores; la respuesta con OK es la evidencia.",
+      "tipo_evidencia_notificacion": "solicitud",
+      "respuestas": { "activo": true, "tipo_evidencia": "aprobacion" }
     }
   }
 }

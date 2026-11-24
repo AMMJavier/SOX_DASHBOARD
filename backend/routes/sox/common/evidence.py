@@ -183,15 +183,15 @@ async def subir_evidencia(
                 raise HTTPException(422, "El consolidado requiere semestre 1 o 2")
         else:
             if semestre is not None:
-                raise HTTPException(422, "La evidencia de un evento no lleva semestre")
-            if evento_id is None or evento_id < 1:
-                raise HTTPException(422, "La evidencia individual requiere evento_id")
-            event = db.execute(text("""
-                SELECT ID FROM AUTOM.SOX_CONTROL5_EVENTOS
-                WHERE ID=:id AND ANIO=:anio
-            """), {"id": evento_id, "anio": anio}).first()
-            if event is None:
-                raise HTTPException(404, "El evento de Control 5 no existe en el año seleccionado")
+                raise HTTPException(422, "La evidencia del Control 5 no lleva semestre")
+            # Sin evento: evidencia anual del correo a Jefatura (lista de administradores).
+            if evento_id is not None:
+                event = db.execute(text("""
+                    SELECT ID FROM AUTOM.SOX_CONTROL5_EVENTOS
+                    WHERE ID=:id AND ANIO=:anio
+                """), {"id": evento_id, "anio": anio}).first()
+                if event is None:
+                    raise HTTPException(404, "El evento de Control 5 no existe en el año seleccionado")
     elif evento_id is not None:
         raise HTTPException(422, "evento_id solo corresponde al Control 5")
     original = Path((file.filename or "").replace("\\", "/")).name.strip()

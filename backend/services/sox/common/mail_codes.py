@@ -38,6 +38,8 @@ DEFAULTS = {
               "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
         "3": {"codigo": "003", "formato_archivo": "pdf", "tipo_evidencia_notificacion": "avance",
               "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
+        "5": {"codigo": "005", "formato_archivo": "pdf", "tipo_evidencia_notificacion": "solicitud",
+              "respuestas": {"activo": True, "tipo_evidencia": "aprobacion"}},
     },
 }
 _lock = threading.Lock()

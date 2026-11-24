@@ -103,8 +103,10 @@ def check_event(db, control, anio, evento_id):
         if evento_id is not None:
             raise HTTPException(422, "evento_id solo corresponde al Control 5")
         return None
-    if evento_id is None or evento_id < 1:
-        raise HTTPException(422, "El correo del Control 5 debe asociarse a un evento")
+    if evento_id is None:
+        return None  # Correo a Jefatura con la lista de administradores (código 005), sin evento.
+    if evento_id < 1:
+        raise HTTPException(422, "Evento de Control 5 inválido")
     event = db.execute(text("""
         SELECT ID AS "id", CUENTA AS "cuenta", OPERACION AS "operacion"
           FROM AUTOM.SOX_CONTROL5_EVENTOS WHERE ID = :p_id AND ANIO = :p_anio

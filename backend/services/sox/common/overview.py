@@ -71,13 +71,10 @@ def _mails(db, control, anio, semestre):
 def _documental(db, control, today):
     anio, semestre, label = _period(control, today)
     item = {"control": control, "nombre": NAMES[control], "periodo": label, "anio": anio, "semestre": semestre,
-            "frecuencia": "Semestral" if semestre else ("Por evento" if control == 5 else "Anual")}
+            "frecuencia": "Semestral" if semestre else ("Por definir" if control == 5 else "Anual")}
     item.update({k: v for k, v in period_status(db, control, anio, semestre, today).items()
                  if k in ("fecha_tope", "dias_restantes", "vencido", "evidencias")})
     item.update(_mails(db, control, anio, semestre))
-    if control == 5:
-        item["eventos"] = int(db.execute(text(
-            "SELECT COUNT(*) FROM AUTOM.SOX_CONTROL5_EVENTOS WHERE ANIO = :p_a"), {"p_a": anio}).scalar() or 0)
     if control == 6:
         row = db.execute(text("""
             SELECT CREADO_EN AS "fecha", TOTAL_RRHH AS "total_rrhh", COINCIDENCIAS AS "coincidencias",

@@ -173,41 +173,11 @@
       }
     },
     "5": {
+      "_info": "Correo formal (código 005) del Líder de Seguridad Operativa y Redes al Jefe de Seguridad Operacional y Redes con la lista de administradores de las plataformas de seguridad. Se escribe y envía a mano desde Evidencias; la respuesta con OK queda como evidencia.",
+      "_copias": "CC fijas del correo formal del Control 5 (por ejemplo, quien lo envía, ya que el remitente es el buzón de SOX).",
       "copias": [],
-      "notificacion": {
-        "destinatarios": [],
-        "asunto": "SOX Control 5 - Evidencias de cambios de administradores firewall | {anio}",
-        "cuerpo": [
-          "Estimados:",
-          "",
-          "Se recuerda registrar cada alta, modificación o baja de administradores como un evento independiente con su autorización y evidencia de ejecución.",
-          "",
-          "Período: {periodo}{referencia_linea}",
-          "",
-          "Saludos."
-        ]
-      },
-      "correo_formal": {
-        "_variables": "{operacion} {cuenta} {perfil} {fecha} {ticket} {ticket_asunto} {linea_observaciones}",
-        "asunto": "SOX Control 5 · {operacion} de administrador firewall: {cuenta}{ticket_asunto}",
-        "cuerpo": [
-          "Estimado(a):",
-          "",
-          "Se solicita su autorización para el siguiente cambio en cuentas administradoras de firewall:",
-          "",
-          "- Operación: {operacion}",
-          "- Cuenta: {cuenta}",
-          "- Grupo / perfil: {perfil}",
-          "- Fecha del evento: {fecha}",
-          "- Ticket / referencia: {ticket}{linea_observaciones}",
-          "",
-          "Quedo atento a su aprobación.",
-          "",
-          "Saludos."
-        ]
-      },
-      "calendario": {
-        "_info": "Por evento: recordatorio para subir las autorizaciones. Sin fecha tope. FECHAS PROVISIONALES.",
+      "_calendario_pendiente": "SIN AUTOMATIZAR TODAVÍA. Para activar recordatorios, renombrar '_calendario' a 'calendario' cuando se definan las fechas.",
+      "_calendario": {
         "recordatorios": [
           "06-15",
           "11-15"

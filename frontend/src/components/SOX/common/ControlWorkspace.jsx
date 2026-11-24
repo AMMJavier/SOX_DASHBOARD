@@ -4,17 +4,19 @@ import { readStoredUser } from "../../../services/authSession";
 import { approveMailReply, downloadControlEvidence, getControlCalendar, getControlEvidences, getControlHistory, getPlanReference, searchMailReplies, uploadControlEvidence, verifyControlEvidence } from "../../../services/sox/common/controlEvidence";
 import { AlertTriangle, CalendarDays, CheckCheck, ChevronDown, ChevronUp, Clock, CornerDownRight, Download, MailCheck, FolderOpen, History, Mail, Paperclip, RefreshCw, RotateCcw, Upload, X } from "lucide-react";
 import { ControlHeading, EvidenceKpis, FileTypes, InfoBanner, Panel, RequirementList, StepList, FIELD, PRIMARY, SECONDARY } from "./ControlUI";
-import Control5Events from "../control_5/Control5Events";
 import ControlReminderPanel from "./ControlReminderPanel";
 import ControlMailPanel from "./ControlMailPanel";
 import { formatDateTime } from "../../../utils/dateTime";
 
 // Controles con correo formal + archivado automático.
-const MAIL_CONTROLS = [1, 2, 3];
+const MAIL_CONTROLS = [1, 2, 3, 5];
 // Controles con botón "Enviar notificación" en la vista Evidencias (correos.json > controles.<n>.notificacion).
 const NOTIFY_CONTROLS = [1, 2, 3];
+// Controles con la vista de Evidencias del Control 1: repositorio primero, correo formal debajo,
+// sin notificación ni "Correos enviados desde SOX".
+const REPOSITORY_FIRST = [1, 5];
 // Tipo de evidencia propuesto para el correo enviado (el usuario puede cambiarlo).
-const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance" };
+const MAIL_DEFAULT_TYPE = { 1: "solicitud", 2: "revision", 3: "avance", 5: "solicitud" };
 // Estado de un correo con código (backend/config/formatos.json) según su respuesta.
 const EVIDENCE_PAGE_SIZE = 3;
 // Botón solo con ícono, mismo estilo que los secundarios del SOX.
@@ -188,8 +190,8 @@ export default function ControlWorkspace({ config }) {
   const repositoryChoices = [...planChoice, ...evidenceRows.filter((e) => !e.codigo).map((e) => ({
     id: e.id, nombre: e.nombre_archivo, bytes: e.bytes, origen: `${typeName(e)} · ${e.estado}` }))];
 
-  // Control 1: sin notificación, correo formal debajo del repositorio y sin "Correos enviados desde SOX".
-  const isControl1 = config.number === 1;
+  // Controles 1 y 5: sin notificación, correo formal debajo del repositorio y sin "Correos enviados desde SOX".
+  const isControl1 = REPOSITORY_FIRST.includes(config.number);
   const mailPanel = MAIL_CONTROLS.includes(config.number) && <ControlMailPanel control={config.number} year={year} semester={periodSemester}
     evidenceTypes={config.evidence} defaultType={MAIL_DEFAULT_TYPE[config.number]} canWrite={canWrite} onArchived={() => setRefreshRecords((n) => n + 1)}
     showSent={!isControl1}
@@ -234,8 +236,8 @@ export default function ControlWorkspace({ config }) {
     {currentView === "resumen" && <div className="grid gap-5 xl:grid-cols-5">
       <div className="space-y-5 xl:col-span-3">
         <Panel title="Actividad del control" description="Objetivo y procedimiento definido para este control SOX.">
-          <p className="mb-5 text-sm leading-7 text-slate-700">{config.activity}</p>
-          <StepList steps={config.steps}/>
+          <p className={`text-sm leading-7 text-slate-700 ${config.steps?.length ? "mb-5" : ""}`}>{config.activity}</p>
+          {config.steps?.length > 0 && <StepList steps={config.steps}/>}
         </Panel>
         <Panel title="Evidencias que debe conservar" description="Tipos documentales esperados; no significa que estén cargados."><FileTypes evidence={config.evidence}/></Panel>
         {config.linkedControl && <InfoBanner>El control {config.number} depende del <strong>Plan de Seguridad del control {config.linkedControl}</strong>. La referencia a la versión aprobada se resolverá mediante el backend.</InfoBanner>}
@@ -267,15 +269,13 @@ export default function ControlWorkspace({ config }) {
         </div>
         <p className="mt-4 text-xs text-slate-500">El expediente se consulta en Oracle por año y, para Control 3, por semestre. Las fechas de corte y recordatorios aún requieren aprobación del área.</p>
       </Panel>
-      <Panel title="Actividades programadas"><StepList steps={config.steps}/></Panel>
+      {config.steps?.length > 0 && <Panel title="Actividades programadas"><StepList steps={config.steps}/></Panel>}
       {config.period === "year" && <InfoBanner>Este control tiene <strong>una sola obligación anual</strong>. Puede tener varias versiones o evidencias en el mismo año, pero no se duplicará como segunda campaña semestral.</InfoBanner>}
       {config.period === "semester" && <InfoBanner>El control debe contar con una revisión por semestre. Las fechas exactas de cada corte deben aprobarse antes de programar recordatorios.</InfoBanner>}
       {config.period === "event" && <InfoBanner caution>Se debe registrar un expediente por cada alta, modificación o baja de administrador. El consolidado semestral es complementario, no reemplaza la evidencia individual.</InfoBanner>}
     </div>}
 
-    {currentView === "evidencias" && (config.number === 5
-      ? <Control5Events year={Number(year)} evidences={evidences} canWrite={canWrite} canVerify={canVerify} onChanged={() => setRefreshRecords((n) => n + 1)}/>
-      : <div className="space-y-5">
+    {currentView === "evidencias" && (<div className="space-y-5">
       {config.number === 3 && <InfoBanner>{planReference
         ? <>Plan anual verificado del Control 2: <strong>{planReference.nombre_archivo}</strong> (ID {planReference.id}). Úsalo como referencia para los avances del semestre.
             <button type="button" className={`${SECONDARY} ml-3 mt-2`} onClick={() => downloadControlEvidence(2, planReference.id, planReference.nombre_archivo).catch((e) => setFeedback(e.message))}>Descargar plan</button></>

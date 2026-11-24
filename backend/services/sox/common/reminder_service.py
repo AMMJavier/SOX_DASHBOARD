@@ -26,10 +26,9 @@ DEFAULTS = {
     3: ("SOX Control 3 - Seguimiento semestral del Plan de Seguridad | {anio} | S{semestre}",
         "Se solicita realizar la revision semestral del avance del plan aprobado en Control 2, "
         "documentar la reunion y cargar el correo o respaldo de la aprobacion de Jefatura."),
-    5: ("SOX Control 5 - Evidencias de cambios de administradores firewall | {anio}",
-        "Se recuerda registrar cada alta, modificacion o baja de administradores como "
-        "un evento independiente con su autorizacion y evidencia de ejecucion. "
-        "El consolidado no reemplaza los respaldos por evento."),
+    5: ("SOX Control 5 - Lista de administradores de firewall | {anio}",
+        "Se solicita enviar al Jefe de Seguridad Operacional y Redes la lista de administradores "
+        "de las plataformas de seguridad y conservar su respuesta con el OK como evidencia."),
     6: ("SOX Control 6 - Conciliacion de cesantes y accesos VPN internos | {anio} | S{semestre}",
         "Se solicita conciliar la fuente autorizada de RR. HH. con los listados internos "
         "LDAP/RDP/aplicaciones y SASE. Los hallazgos requieren verificacion antes de realizar bajas. "
