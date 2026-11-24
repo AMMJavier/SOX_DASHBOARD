@@ -55,6 +55,19 @@ def _managers(db, campaign_id):
                          "correo": (row["correo"] or "").strip() or None, "ambiguo": int(row["correos"] or 0) > 1,
                          "vpn": int(row["accesos"] or 0), "confirmadas": int(row["confirmadas"] or 0),
                          "reportadas": int(row["reportadas"] or 0)}
+    # Última asignación MANUAL de cuentas a cada gerente: el aviso enviado antes ya no cuenta y se
+    # puede volver a notificar (aunque sea el mismo gerente que la había reportado).
+    for row in db.execute(text("""
+        SELECT LOWER(i.GERENTE_USUARIO) AS "usuario", MAX(l.FECHA) AS "fecha"
+          FROM AUTOM.SOX_C7_VPN_INTERNAS_LOG l
+          JOIN AUTOM.SOX_C7_VPN_INTERNAS i ON i.ID = l.INTERNA_ID
+         WHERE l.ID_CAMPANA = :p_camp AND i.ID_CAMPANA = :p_camp AND i.GERENTE_MANUAL = 1
+           AND l.ACCION = 'ASIGNACION MANUAL DE GERENTE' AND l.GERENTE = i.GERENTE
+         GROUP BY LOWER(i.GERENTE_USUARIO)
+    """), {"p_camp": campaign_id}).mappings():
+        item = managers.get(KEY_PREFIX + (row["usuario"] or ""))
+        if item:
+            item["reasignado"] = row["fecha"]
     counts = db.execute(text("""
         SELECT COUNT(*), NVL(SUM(CASE WHEN GERENTE_USUARIO IS NULL THEN 1 ELSE 0 END), 0)
           FROM AUTOM.SOX_C7_VPN_INTERNAS WHERE ID_CAMPANA = :p_camp
@@ -89,7 +102,7 @@ def _contact(item):
 def _attempts(db, campaign_id):
     rows = db.execute(text("""
         SELECT GERENTE_KEY AS "key", ESTADO AS "estado", DESTINATARIOS AS "correo",
-               DETALLE AS "detalle", FECHA_ENVIO AS "fecha_envio"
+               DETALLE AS "detalle", FECHA_ENVIO AS "fecha_envio", FECHA_SOLICITUD AS "fecha_solicitud"
           FROM AUTOM.SOX_MAIL_OUTBOX
          WHERE ORIGEN = 'CAMPANA' AND ID_CAMPANA = :p_camp AND GERENTE_KEY LIKE 'int:%'
            AND (CASE WHEN ASUNTO LIKE '[PRUEBA]%' THEN 1 ELSE 0 END) = :p_test
@@ -104,6 +117,11 @@ def _attempts(db, campaign_id):
 def _row(item, attempts_by_key):
     contact_state, emails = _contact(item)
     all_attempts = attempts_by_key.get(item["key"], [])
+    # Avisos anteriores a la última asignación manual: no cuentan (se puede volver a notificar).
+    since = item.get("reasignado")
+    reset = bool(since) and any((a["fecha_solicitud"] or since) < since for a in all_attempts)
+    if since:
+        all_attempts = [a for a in all_attempts if a["fecha_solicitud"] and a["fecha_solicitud"] >= since]
     attempts = ext._for_current_email(all_attempts, emails)
     state, _ = ext._notification_state(attempts)
     last = attempts[-1] if attempts else None
@@ -113,7 +131,8 @@ def _row(item, attempts_by_key):
         "pendientes": item["vpn"] - item["confirmadas"], "correo": ", ".join(emails) if emails else None,
         "contacto": contact_state, "notificacion": state, "intentos": len(all_attempts),
         "detalle": (f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
-                    if changed else (last["detalle"] if last else None)),
+                    if changed else (last["detalle"] if last else
+                                     ("Se le asignaron cuentas a mano después del último aviso" if reset else None))),
         "fecha_envio": ext._fmt(last["fecha_envio"]) if last else None,
         "enviable": contact_state == ext.READY and ext._can_send(state),
         "_emails": emails,
