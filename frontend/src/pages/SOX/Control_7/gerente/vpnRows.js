@@ -1,6 +1,7 @@
 /** Filas comunes del panel del gerente: VPN externas (Check Point) e internas (LDAP). */
 
-export const DECISIONS = ["Mantener", "Eliminar", "No pertenece", "Otro"];
+// Opciones del gerente. "No pertenece" ya no se ofrece; solo se muestra si una VPN ya se guardó así.
+export const DECISIONS = ["Mantener", "Eliminar", "Otro"];
 export const CONFIRMED = "confirmada";
 export const REPORTED = "reportada"; // Otro / No pertenece: pendiente, en manos del administrador
 export const PENDING = "pendiente";

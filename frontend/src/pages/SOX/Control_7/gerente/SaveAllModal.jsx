@@ -38,7 +38,7 @@ export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfir
             {SCOPES[m.key].title}: {m.count} sin decisión elegida; quedarán pendientes.</p>)}
 
           {canSave && reported > 0 && <p className="rounded-lg bg-slate-50 p-3">
-            {reported} con <b>Otro</b> o <b>No pertenece</b> quedarán pendientes hasta que el administrador las revise.</p>}
+            {reported} con <b>Otro</b> quedarán pendientes hasta que el administrador las revise.</p>}
           {canSave && <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">Una vez guardadas, las decisiones no se pueden cambiar. Revise antes de confirmar.</p>}
         </div>
 
@@ -47,6 +47,36 @@ export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfir
           {canSave && <button type="button" onClick={onConfirm} disabled={busy}
             className="flex h-11 items-center gap-2 rounded-lg bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">
             <Save size={16}/>{busy ? "Guardando..." : "Sí, guardar"}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Confirmación del guardado individual: el gerente acepta o cancela la decisión de UNA VPN. */
+export function SaveOneModal({ row, scopeTitle, busy, onClose, onConfirm }) {
+  const name = row.cells[1] && row.cells[1] !== "-" ? row.cells[1] : row.cells[0];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label="Confirmar decisión">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <h3 className="flex items-center gap-2 text-lg font-bold"><AlertTriangle size={20} className="text-amber-500"/>¿Confirma la decisión de esta VPN?</h3>
+          <button type="button" onClick={onClose} disabled={busy} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><X size={20}/></button>
+        </div>
+        <div className="space-y-3 text-sm text-slate-700">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-slate-50 p-3">
+            <dt className="font-semibold text-slate-500">{scopeTitle}</dt><dd className="font-semibold">{name}</dd>
+            <dt className="font-semibold text-slate-500">Decisión</dt><dd className="font-bold">{row.decision}</dd>
+            {row.decision === "Otro" && <><dt className="font-semibold text-slate-500">Observación</dt><dd>{row.observation}</dd></>}
+          </dl>
+          {row.decision === "Otro" && <p>La VPN quedará <b>pendiente</b> hasta que el administrador la revise.</p>}
+          <p className="rounded-lg bg-red-50 p-3 font-semibold text-red-700">Una vez guardada, la decisión no se puede cambiar.</p>
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} disabled={busy} className="h-11 rounded-lg border border-slate-300 px-5 text-sm font-bold">Cancelar</button>
+          <button type="button" onClick={onConfirm} disabled={busy}
+            className="flex h-11 items-center gap-2 rounded-lg bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">
+            <Save size={16}/>{busy ? "Guardando..." : "Aceptar"}</button>
         </div>
       </div>
     </div>

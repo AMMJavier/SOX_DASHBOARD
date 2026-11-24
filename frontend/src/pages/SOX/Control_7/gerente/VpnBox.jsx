@@ -47,6 +47,7 @@ export default function VpnBox({ title, headers, rows, loading, error, expired, 
             <tbody>{visible.map((r) => {
               const locked = expired || busy || r.status !== PENDING;
               const other = r.decision === "Otro";
+              const writing = other && !locked; // "Otro" sin guardar: el cuadro se pone blanco para escribir
               return (
                 <tr key={r.id} className="hover:bg-slate-50">
                   {r.cells.map((value, i) => <td key={headers[i]} className={`${TD} ${i === 0 ? "font-semibold" : ""}`}>{value}
@@ -54,14 +55,17 @@ export default function VpnBox({ title, headers, rows, loading, error, expired, 
                   <td className={TD}>
                     <select value={r.decision} disabled={locked} onChange={(e) => onChange(r.id, "decision", e.target.value)}
                       className="h-10 rounded-lg border border-slate-300 bg-white px-3 outline-none disabled:bg-slate-100 disabled:text-slate-500">
-                      <option value="">Seleccionar</option>{DECISIONS.map((d) => <option key={d}>{d}</option>)}
+                      <option value="">Seleccionar</option>
+                      {(DECISIONS.includes(r.decision) || !r.decision ? DECISIONS : [...DECISIONS, r.decision]).map((d) => <option key={d}>{d}</option>)}
                     </select>
                   </td>
                   <td className={TD}>
                     <input value={r.observation} disabled={locked || !other} maxLength={1000}
                       onChange={(e) => onChange(r.id, "observation", e.target.value)}
-                      placeholder={other ? "Ingrese observación" : "Bloqueado"}
-                      className="h-10 w-56 rounded-lg border border-slate-300 px-3 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"/>
+                      placeholder={writing ? "Escriba aquí su comentario (obligatorio)" : other ? "" : "Bloqueado"}
+                      className={`h-10 w-56 rounded-lg border px-3 outline-none ${writing
+                        ? `bg-white text-slate-900 focus:ring-2 focus:ring-amber-200 ${r.observation.trim() ? "border-slate-400" : "border-amber-500"}`
+                        : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-500"}`}/>
                   </td>
                   <td className={TD}><Status status={r.status}/></td>
                   <td className={TD}>{deadline || "-"}</td>

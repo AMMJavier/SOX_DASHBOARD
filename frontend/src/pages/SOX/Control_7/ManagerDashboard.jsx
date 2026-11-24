@@ -5,9 +5,9 @@ import { getCampaignStatus } from "../../../services/sox/control_7/campaignServi
 import {
   confirmAllInternal, errorText, getMyInternalAccounts, saveInternalDecision,
 } from "../../../services/sox/control_7/internalVpnService";
-import SaveAllModal from "./gerente/SaveAllModal";
+import SaveAllModal, { SaveOneModal } from "./gerente/SaveAllModal";
 import VpnBox from "./gerente/VpnBox";
-import { SCOPES, buildPlan, externalRow, internalRow, needsObservation, statusFor } from "./gerente/vpnRows";
+import { PENDING, SCOPES, buildPlan, externalRow, internalRow, needsObservation, statusFor } from "./gerente/vpnRows";
 
 const SEMAPHORE = {
   verde: { color: "bg-green-500", text: "En plazo" },
@@ -39,6 +39,7 @@ export default function ManagerDashboard() {
   const [touched, setTouched] = useState({ externas: false, internas: false });
   const [campaign, setCampaign] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [confirmOne, setConfirmOne] = useState(null); // { key, row } a la espera de Aceptar / Cancelar
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
@@ -58,6 +59,9 @@ export default function ManagerDashboard() {
   const expired = !!campaign?.expired;
   const semaphore = SEMAPHORE[campaign?.semaforo];
   const rowsByScope = { externas: boxes.externas.rows, internas: boxes.internas.rows };
+  // Sin VPN por validar en ningún cuadro (ya cargados): "Guardar todas" se deshabilita.
+  const allSaved = KEYS.every((k) => !boxes[k].loading && !boxes[k].error)
+    && KEYS.every((k) => !boxes[k].rows.some((r) => r.status === PENDING));
 
   const change = (key) => (id, field, value) => setRows(key, (rows) => rows.map((r) => (
     r.id !== id ? r : { ...r, [field]: value, ...(field === "decision" && value !== "Otro" ? { observation: "" } : {}) })));
@@ -65,9 +69,15 @@ export default function ManagerDashboard() {
   const markSaved = (key, ids) => setRows(key, (rows) => rows.map((r) => (
     ids.includes(r.id) ? { ...r, status: statusFor(r.decision) } : r)));
 
-  const saveOne = (key) => async (row) => {
+  // Guardado individual: primero se valida y se pide confirmación; guarda solo con "Aceptar".
+  const saveOne = (key) => (row) => {
     if (!row.decision) { setFeedback({ error: true, text: "Debe seleccionar una decisión antes de guardar." }); return; }
     if (needsObservation(row)) { setFeedback({ error: true, text: "Debe ingresar una observación cuando seleccione \"Otro\"." }); return; }
+    setFeedback(null); setConfirmOne({ key, row });
+  };
+
+  async function confirmSaveOne() {
+    const { key, row } = confirmOne;
     setBusy(true); setFeedback(null);
     try {
       await API[key].saveOne(row);
@@ -76,8 +86,8 @@ export default function ManagerDashboard() {
         ? `Guardada. La VPN queda pendiente hasta que el administrador la revise ("${row.decision}").`
         : "Validación guardada correctamente." });
     } catch (e) { setFeedback({ error: true, text: errorText(e, "No se pudo guardar la validación.") }); }
-    finally { setBusy(false); }
-  };
+    finally { setBusy(false); setConfirmOne(null); }
+  }
 
   async function saveAll() {
     setBusy(true); setFeedback(null);
@@ -107,9 +117,9 @@ export default function ManagerDashboard() {
         <h3 className="text-base font-bold text-amber-800">Instrucciones para la validación</h3>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-700">
           <li>Solo ves las VPN asignadas a tu usuario: primero las <b>externas</b> y más abajo las <b>internas</b>.</li>
-          <li>En la columna <b>Decisión</b>, seleccione una opción: Mantener, Eliminar, No pertenece u Otro.</li>
-          <li>El campo <b>Observación</b> solo se habilita con la opción <b>Otro</b> y es obligatorio.</li>
-          <li>Con <b>No pertenece</b> u <b>Otro</b> la VPN queda <b>pendiente</b> hasta que el administrador la revise.</li>
+          <li>En la columna <b>Decisión</b>, seleccione una opción: Mantener, Eliminar u Otro.</li>
+          <li>Con la opción <b>Otro</b>, el campo <b>Observación</b> se pone en blanco: escriba el motivo (es obligatorio).</li>
+          <li>Con <b>Otro</b> la VPN queda <b>pendiente</b> hasta que el administrador la revise.</li>
           <li>Una vez guardada la decisión <b>no se puede cambiar</b>.</li>
           <li><b>Guardar todas</b> guarda solo el cuadro en el que trabajaste.</li>
         </ul>
@@ -134,14 +144,16 @@ export default function ManagerDashboard() {
 
       <div className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
         <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">
-          {feedback?.text || "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos)."}</p>
-        <button type="button" disabled={expired || busy || !campaign?.active} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
+          {feedback?.text || (allSaved ? "Ya guardaste todas tus VPN de esta campaña." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
+        <button type="button" disabled={expired || busy || !campaign?.active || allSaved} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
           className="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
-          <Save size={16}/>{expired ? "Campaña cerrada" : "Guardar todas"}</button>
+          <Save size={16}/>{expired ? "Campaña cerrada" : allSaved ? "Todas guardadas" : "Guardar todas"}</button>
       </div>
 
       {plan && <SaveAllModal plan={plan} touchedAny={touched.externas || touched.internas} busy={busy}
         onClose={() => setPlan(null)} onConfirm={saveAll}/>}
+      {confirmOne && <SaveOneModal row={confirmOne.row} scopeTitle={confirmOne.key === "externas" ? "VPN externa" : "Cuenta interna"} busy={busy}
+        onClose={() => setConfirmOne(null)} onConfirm={confirmSaveOne}/>}
     </div>
   );
 }
