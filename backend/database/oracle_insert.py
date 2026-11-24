@@ -31,11 +31,16 @@ def _apply_campaign_rules(cursor, before):
                      WHERE CHECKPOINT_UID = :p_uid
                 """, {"p_req": old["req"], "p_sol": old["solicitante"], "p_ger": old["gerente"], "p_uid": uid})
                 kept += 1
+        elif manager_key(old["gerente"]) != manager_key(new["gerente"]) and not is_reported(old["estado"]):
+            # Pendiente que Check Point pasó a otro gerente: la VPN cambió, se marca la fecha.
+            cursor.execute("""
+                UPDATE AUTOM.CHECKPOINT_TRANSFORM SET FECHA_MODIFICACION = SYSDATE WHERE CHECKPOINT_UID = :p_uid
+            """, {"p_uid": uid})
         elif is_reported(old["estado"]):
             if manager_key(old["gerente"]) != manager_key(new["gerente"]):
                 cursor.execute("""
                     UPDATE AUTOM.CHECKPOINT_TRANSFORM
-                       SET ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMACION = 0
+                       SET ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMACION = 0, FECHA_MODIFICACION = SYSDATE
                      WHERE CHECKPOINT_UID = :p_uid
                 """, {"p_uid": uid})
                 cursor.execute("""

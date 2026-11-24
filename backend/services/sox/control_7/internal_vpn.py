@@ -184,7 +184,10 @@ def load_from_ldap(db, campaign_id=None, replace=False):
                  d.OBSERVACION = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
                                       THEN d.OBSERVACION ELSE NULL END,
                  d.CONFIRMADO_POR = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
-                                         THEN d.CONFIRMADO_POR ELSE NULL END
+                                         THEN d.CONFIRMADO_POR ELSE NULL END,
+                 -- Cambio de gerente = la cuenta cambió: se marca la fecha de modificación.
+                 d.FECHA_MODIFICACION = CASE WHEN NVL(LOWER(d.GERENTE_USUARIO), '-') = NVL(LOWER(:p_ger_user), '-')
+                                             THEN d.FECHA_MODIFICACION ELSE :p_now END
             WHEN NOT MATCHED THEN INSERT
                  (ID_CAMPANA, USUARIO, NOMBRE, TIPO_ACCESO, ACTIVO_AD, GERENTE, GERENTE_USUARIO, GERENTE_CORREO,
                   GERENTE_MANUAL, ESTADO, CONFIRMACION, FECHA_CARGA)
@@ -588,9 +591,10 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
             db.execute(text("""
                 UPDATE AUTOM.SOX_C7_VPN_INTERNAS
                    SET GERENTE = :p_ger, GERENTE_USUARIO = :p_user, GERENTE_CORREO = :p_mail, GERENTE_MANUAL = 1,
-                       ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMADO_POR = NULL, CONFIRMACION = 0
+                       ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMADO_POR = NULL, CONFIRMACION = 0,
+                       FECHA_MODIFICACION = :p_now
                  WHERE ID = :p_id
-            """), {"p_ger": nombre, "p_user": usuario, "p_mail": correo, "p_id": r["id"]})
+            """), {"p_ger": nombre, "p_user": usuario, "p_mail": correo, "p_now": now, "p_id": r["id"]})
             before = f", antes {r['gerente']}" if r["gerente"] else ""
             db.execute(text("""
                 INSERT INTO AUTOM.SOX_C7_VPN_INTERNAS_LOG
