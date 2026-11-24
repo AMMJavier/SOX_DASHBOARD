@@ -566,7 +566,7 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
     rows = db.execute(text("""
         SELECT ID AS "id", USUARIO AS "usuario", TIPO_ACCESO AS "tipo_acceso", GERENTE AS "gerente",
                GERENTE_USUARIO AS "gerente_usuario", GERENTE_MANUAL AS "gerente_manual",
-               ESTADO AS "estado", CONFIRMACION AS "confirmacion"
+               ESTADO AS "estado", OBSERVACION AS "observacion", CONFIRMACION AS "confirmacion"
           FROM AUTOM.SOX_C7_VPN_INTERNAS
          WHERE ID_CAMPANA = :p_camp AND ID IN (""" + ", ".join(":" + k for k in binds) + """)
     """), {"p_camp": campaign["id"], **binds}).mappings().all()
@@ -575,7 +575,10 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
     blocked = [r["usuario"] for r in rows if r["gerente_usuario"] and r["gerente_manual"] != 1]
     if blocked:
         raise HTTPException(409, "Estas cuentas ya tienen gerente en AD: " + ", ".join(blocked[:10]))
-    confirmed = [r["usuario"] for r in rows if r["confirmacion"] == 1]
+    # Solo bloquean las confirmadas de verdad (Mantener / Eliminar). Las reportadas (Otro / No
+    # pertenece) siguen pendientes y se pueden pasar a otro gerente, aunque por una regla anterior
+    # tengan CONFIRMACION = 1.
+    confirmed = [r["usuario"] for r in rows if is_confirmed(r["estado"], r["confirmacion"])]
     if confirmed:
         raise HTTPException(409, "Estas cuentas ya fueron confirmadas: " + ", ".join(confirmed[:10]))
 
@@ -585,7 +588,7 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
             db.execute(text("""
                 UPDATE AUTOM.SOX_C7_VPN_INTERNAS
                    SET GERENTE = :p_ger, GERENTE_USUARIO = :p_user, GERENTE_CORREO = :p_mail, GERENTE_MANUAL = 1,
-                       ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMADO_POR = NULL
+                       ESTADO = 'mantener', OBSERVACION = NULL, CONFIRMADO_POR = NULL, CONFIRMACION = 0
                  WHERE ID = :p_id
             """), {"p_ger": nombre, "p_user": usuario, "p_mail": correo, "p_id": r["id"]})
             before = f", antes {r['gerente']}" if r["gerente"] else ""
@@ -594,9 +597,10 @@ def assign_manager(db, *, item_ids, usuario, nombre=None, correo=None, user):
                   (INTERNA_ID, ID_CAMPANA, CUENTA, TIPO_ACCESO, GERENTE, ACCION, ESTADO_ANTERIOR, ESTADO_NUEVO,
                    OBSERVACION_ANTERIOR, OBSERVACION_NUEVA, USUARIO_SOX, FECHA)
                 VALUES (:p_id, :p_camp, :p_cuenta, :p_tipo, :p_ger, 'ASIGNACION MANUAL DE GERENTE', :p_est, 'mantener',
-                        NULL, :p_obs, :p_admin, :p_now)
+                        :p_obs_ant, :p_obs, :p_admin, :p_now)
             """), {"p_id": r["id"], "p_camp": campaign["id"], "p_cuenta": r["usuario"], "p_tipo": r["tipo_acceso"],
-                   "p_ger": nombre, "p_est": r["estado"], "p_admin": user.username, "p_now": now,
+                   "p_ger": nombre, "p_est": r["estado"], "p_obs_ant": r["observacion"],
+                   "p_admin": user.username, "p_now": now,
                    "p_obs": f"Gerente asignado por el administrador: {nombre} ({usuario}){before}"[:1000]})
         db.commit()
     except Exception:
