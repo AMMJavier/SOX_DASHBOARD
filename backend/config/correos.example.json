@@ -248,7 +248,7 @@
       },
       "recordatorio_diario": {
         "_info": "Cada día, desde el siguiente al aviso de apertura y hasta la fecha límite, recuerda a cada gerente cuántas VPN (externas + internas) le faltan por validar. No se envía a quien ya validó todas ni (en modo real) a quien aún no recibió el aviso de apertura. Requiere automatico.activo=true. copias: CC solo de este recordatorio.",
-        "_variables": "{gerente} {campana} {periodo} {pendientes} {pendientes_externas} {pendientes_internas} {fecha_limite} {dias_restantes} {linea_portal} {portal}",
+        "_variables": "{gerente} {nombre} {anio} {semestre} {campana} {periodo} {lineas_vpn} (solo los pendientes que tenga) {pendientes} {pendientes_externas} {pendientes_internas} {fecha_limite} {fecha_limite_texto} {dias_restantes} {portal}",
         "activo": false,
         "hora_desde": "09:00",
         "copias": [],
@@ -260,7 +260,29 @@
           ],
           "intervalo_minutos": 0,
           "max_correos_por_ronda": 5
-        }
+        },
+        "asunto": "Recordatorio - Control SOX - Soporte VPN {anio} {semestre} Semestre - {gerente}",
+        "cuerpo": [
+          "Estimado(a) {nombre},",
+          "",
+          "Saludos cordiales,",
+          "",
+          "En el marco del cumplimiento de controles SOX, estamos llevando a cabo la revisión de la vigencia de los accesos VPN asignados a los usuarios bajo su Gerencia.",
+          "Agradecemos su colaboración confirmando si se requiere mantener la VPN de los usuarios a su cargo. A la fecha tiene pendientes de confirmar:",
+          "",
+          "{lineas_vpn}",
+          "",
+          "Para revisar el detalle e indicar si cada acceso se mantiene o se elimina, ingrese con su cuenta corporativa a la plataforma: {portal}",
+          "",
+          "Cabe mencionar que la evidencia es la confirmación registrada por la Gerencia en la plataforma.",
+          "",
+          "La fecha límite para recibir su confirmación es el {fecha_limite_texto}. Pasada esta fecha, en caso de requerir nuevamente el acceso VPN, deberá gestionarse un requerimiento normal a través del sistema Remedy.",
+          "",
+          "Quedamos atentos a su gentil respuesta.",
+          "",
+          "Saludos cordiales,",
+          "CIBERSEGURIDAD OPERATIVA Y REDES • INFRAESTRUCTURA TI"
+        ]
       }
     }
   }

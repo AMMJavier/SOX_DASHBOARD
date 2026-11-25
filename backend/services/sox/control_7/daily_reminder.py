@@ -36,17 +36,37 @@ _lock = threading.Lock()
 _done = None          # (campaña, día o ronda) ya recorrido por este proceso
 _last_reason = None   # evita repetir cada minuto la misma traza
 
-DEFAULT_SUBJECT = "SOX Control 7 - Recordatorio: {pendientes} VPN por validar | {periodo}"
+# Mismo formato que el aviso de apertura (correo manual de Ciberseguridad), con los PENDIENTES.
+DEFAULT_SUBJECT = "Recordatorio - Control SOX - Soporte VPN {anio} {semestre} Semestre - {gerente}"
 DEFAULT_BODY = (
-    "Estimado(a) {gerente}:\n\n"
-    "Le recordamos que tiene {pendientes} VPN por validar en la campaña \"{campana}\".\n\n"
-    "- VPN externas pendientes: {pendientes_externas}\n"
-    "- VPN internas pendientes: {pendientes_internas}\n"
-    "- Fecha límite de validación: {fecha_limite} (faltan {dias_restantes} día(s))\n\n"
-    "{linea_portal} para validar sus accesos. Este recordatorio se envía cada día hasta que "
-    "complete la validación.\n\n"
-    "Saludos."
+    "Estimado(a) {nombre},\n\n"
+    "Saludos cordiales,\n\n"
+    "En el marco del cumplimiento de controles SOX, estamos llevando a cabo la revisión de la vigencia de "
+    "los accesos VPN asignados a los usuarios bajo su Gerencia.\n"
+    "Agradecemos su colaboración confirmando si se requiere mantener la VPN de los usuarios a su cargo. "
+    "A la fecha tiene pendientes de confirmar:\n\n"
+    "{lineas_vpn}\n\n"
+    "Para revisar el detalle e indicar si cada acceso se mantiene o se elimina, ingrese con su cuenta "
+    "corporativa a la plataforma: {portal}\n\n"
+    "Cabe mencionar que la evidencia es la confirmación registrada por la Gerencia en la plataforma.\n\n"
+    "La fecha límite para recibir su confirmación es el {fecha_limite_texto}. Pasada esta fecha, en caso de "
+    "requerir nuevamente el acceso VPN, deberá gestionarse un requerimiento normal a través del sistema Remedy.\n\n"
+    "Quedamos atentos a su gentil respuesta.\n\n"
+    "Saludos cordiales,\n"
+    "CIBERSEGURIDAD OPERATIVA Y REDES • INFRAESTRUCTURA TI"
 )
+
+
+def pending_lines(externas, internas):
+    """Solo los tipos con pendientes (sin listar cada VPN)."""
+    lines = []
+    if externas:
+        lines.append(f"- VPN externas pendientes: {externas}")
+    if internas:
+        lines.append(f"- VPN internas pendientes: {internas}")
+    if externas and internas:
+        lines.append(f"- Total pendiente: {externas + internas}")
+    return ext.NL.join(lines)
 
 
 def _skip(reason):
@@ -128,9 +148,13 @@ def compose(campaign, item, today):
     config = mail_config.c7_daily_reminder()
     deadline = campaign["fecha_limite"]
     portal = mail_config.c7_notice()["portal"]  # correos.json > aviso_gerentes.portal (o SOX_PORTAL_URL)
+    semester = "Primer" if int(campaign["semestre"]) == 1 else "Segundo"
     values = {
-        "gerente": item["gerente"], "campana": campaign["nombre"],
-        "periodo": f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre",
+        "gerente": item["gerente"], "nombre": ext._first_name(item["gerente"]) or item["gerente"],
+        "campana": campaign["nombre"], "anio": campaign["anio"], "semestre": semester,
+        "periodo": f"{campaign['anio']} - {semester.lower()} semestre",
+        "lineas_vpn": pending_lines(item["externas"], item["internas"]),
+        "fecha_limite_texto": f"{deadline.day} de {ext.MONTHS[deadline.month - 1]} de {deadline.year}",
         "pendientes": item["externas"] + item["internas"], "pendientes_externas": item["externas"],
         "pendientes_internas": item["internas"], "fecha_limite": deadline.strftime("%d/%m/%Y"),
         "dias_restantes": (deadline.date() - today).days, "portal": portal,
