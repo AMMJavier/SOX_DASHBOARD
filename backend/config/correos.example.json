@@ -222,7 +222,7 @@
         "_sincronizar_contactos_ldap": "true = al iniciar campaña se actualizan los correos de SOX_GERENTES_CONTACTO desde LDAP (sobrescribe cambios manuales). false = se conservan los correos de la tabla (pruebas).",
         "sincronizar_contactos_ldap": true,
         "_portal": "Enlace a la plataforma en los correos del Control 7 (si falta, se usa SOX_PORTAL_URL del .env).",
-        "portal": "portalinfraestructura.conecel.com",
+        "portal": "https://portalinfraestructura.conecel.com",
         "asunto": "Control SOX - Soporte VPN {anio} {semestre} Semestre - {gerente}",
         "cuerpo": [
           "Estimado(a) {nombre},",
