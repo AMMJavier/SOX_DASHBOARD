@@ -244,12 +244,13 @@
         "hora_desde": "09:00",
         "copias": [],
         "modo_prueba": {
-          "_info": "Con activo=true el recordatorio NUNCA va a los gerentes: el de cada gerente llega a estos destinatarios con asunto [PRUEBA], desde el día siguiente al inicio de la campaña, aunque no se haya enviado el aviso de apertura. max_correos_por_dia: tope de correos de prueba por día (0 = uno por cada gerente pendiente). Para enviarlo de verdad a los gerentes: activo=false aquí y en aviso_gerentes.modo_prueba.",
+          "_info": "Con activo=true el recordatorio NUNCA va a los gerentes: el de cada gerente llega a estos destinatarios con asunto [PRUEBA], desde hora_desde, aunque no se haya enviado el aviso de apertura. intervalo_minutos: repetir cada N minutos (0 = una vez al día). max_correos_por_ronda: tope de correos por ronda (0 = uno por cada gerente pendiente). Para enviarlo de verdad a los gerentes: activo=false aquí y en aviso_gerentes.modo_prueba (en real siempre es una vez al día).",
           "activo": true,
           "destinatarios": [
             "usuario.prueba@dominio-permitido.com"
           ],
-          "max_correos_por_dia": 5
+          "intervalo_minutos": 0,
+          "max_correos_por_ronda": 5
         }
       }
     }

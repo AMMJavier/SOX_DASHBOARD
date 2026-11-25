@@ -9,8 +9,9 @@
 - Sin duplicados: la clave C7D-<campaña>-<gerente>-<AAAAMMDD> es única en SOX_MAIL_OUTBOX,
   aunque se reinicie la API o haya varios procesos.
 - Modo prueba propio (recordatorio_diario.modo_prueba): el recordatorio de cada gerente va SOLO a
-  los destinatarios de prueba con asunto [PRUEBA], desde el día siguiente al inicio de la campaña
-  y sin exigir el aviso de apertura (para probarlo sin haber avisado a ningún gerente).
+  los destinatarios de prueba con asunto [PRUEBA], desde hora_desde (también el día de inicio de la
+  campaña) y sin exigir el aviso de apertura (para probarlo sin haber avisado a ningún gerente).
+  Con intervalo_minutos > 0 se repite cada N minutos en vez de una vez al día (solo en prueba).
 Configuración: correos.json > controles.7.recordatorio_diario (apagado por defecto).
 """
 from __future__ import annotations  # Python 3.9 en el servidor
@@ -32,7 +33,7 @@ from services.sox.control_7 import internal_notifications as internal
 from services.sox.control_7 import notifications as ext
 
 _lock = threading.Lock()
-_done = None          # (campaña, día) ya recorrido por este proceso
+_done = None          # (campaña, día o ronda) ya recorrido por este proceso
 _last_reason = None   # evita repetir cada minuto la misma traza
 
 DEFAULT_SUBJECT = "SOX Control 7 - Recordatorio: {pendientes} VPN por validar | {periodo}"
@@ -154,7 +155,7 @@ def _allowed(addresses):
     return all(mail.EMAIL_RE.fullmatch(e) and e.rsplit("@", 1)[1].lower() in domains for e in addresses)
 
 
-def _send(db, campaign, item, today, user):
+def _send(db, campaign, item, today, user, stamp):
     """True = enviado, False = falló, None = ya estaba registrado hoy o no corresponde."""
     emails = test_emails() if is_test() else [item["correo"]]
     if not emails or not _allowed(emails):
@@ -167,7 +168,7 @@ def _send(db, campaign, item, today, user):
         copies = []
     key = "dia:" + (item["correo"] or item["gerente"]).casefold()
     prefix = "C7DP" if is_test() else "C7D"
-    idem = f"{prefix}-{campaign['id']}-{ext._key_hash(key)}-{today:%Y%m%d}"
+    idem = f"{prefix}-{campaign['id']}-{ext._key_hash(key)}-{stamp}"
     if db.execute(text("SELECT COUNT(*) FROM AUTOM.SOX_MAIL_OUTBOX WHERE IDEMPOTENCY_KEY = :p_idem"),
                   {"p_idem": idem}).scalar():
         return None
@@ -237,7 +238,13 @@ def run_once(now=None, db=None):
         if not campaign:
             return _skip("no hay una campaña activa")
         today = now.date()
-        if _done == (campaign["id"], today):
+        test_only = own_test()
+        # En prueba con intervalo: una ronda cada N minutos desde hora_desde (clave AAAAMMDD-ronda).
+        interval = config["intervalo_prueba"] if test_only else 0
+        stamp = f"{today:%Y%m%d}"
+        if interval:
+            stamp += f"-{(now.hour * 60 + now.minute - config['minuto_del_dia']) // interval}"
+        if _done == (campaign["id"], stamp):
             return 0
         deadline = campaign["fecha_limite"]
         if not isinstance(deadline, datetime) or now > deadline:
@@ -246,12 +253,6 @@ def run_once(now=None, db=None):
 
         from services.sox.common.reminder_scheduler import _system_user
         user = _system_user(db)
-        test_only = own_test()
-        if test_only:
-            started = campaign.get("fecha_inicio")
-            started = started.date() if isinstance(started, datetime) else started
-            if started and today <= started:
-                return _skip(f"modo prueba: el primer recordatorio es al día siguiente del inicio de la campaña {campaign['id']}")
         pending, without_mail = pending_by_manager(db, campaign, keep_without_mail=test_only)
         notices = {} if test_only else ext._notifications(db, campaign["id"])  # avisos de apertura
         limit = config["max_prueba"] if test_only else 0
@@ -265,7 +266,7 @@ def run_once(now=None, db=None):
                 capped += 1
                 continue
             try:
-                ok = _send(db, campaign, item, today, user)
+                ok = _send(db, campaign, item, today, user, stamp)
             except Exception as exc:  # Un gerente con error no detiene a los demás.
                 db.rollback()
                 ok = False
@@ -273,9 +274,9 @@ def run_once(now=None, db=None):
             sent += ok is True
             failed += ok is False
             already += ok is None
-        _done = (campaign["id"], today)
+        _done = (campaign["id"], stamp)
         mail.console(
-            f"RECORDATORIO C7 FIN | campaña={campaign['id']} modo={'PRUEBA' if is_test() else 'REAL'} "
+            f"RECORDATORIO C7 FIN | campaña={campaign['id']} ronda={stamp} modo={'PRUEBA' if is_test() else 'REAL'} "
             f"con_pendientes={len(pending)} enviados={sent} fallidos={failed} omitidos={already} "
             f"sobre_limite_prueba={capped} "
             f"sin_aviso_de_apertura={not_opened} sin_correo={len(without_mail)} | {mail.elapsed(start)}")

@@ -226,10 +226,13 @@ def c7_daily_reminder() -> dict:
     general = automatic()
     hour, minute = _hour(data.get("hora_desde", general["hora_desde"]), "recordatorio_diario.hora_desde")
     test = data.get("modo_prueba") or {}
-    try:
-        max_test = max(int(test.get("max_correos_por_dia", 0) or 0), 0)
-    except (TypeError, ValueError):
-        max_test = 0
+    def number(value):
+        try:
+            return max(int(value or 0), 0)
+        except (TypeError, ValueError):
+            return 0
+    max_test = number(test.get("max_correos_por_ronda", test.get("max_correos_por_dia", 0)))
+    interval = number(test.get("intervalo_minutos"))
     return {
         "activo": data.get("activo") is True and general["activo"],
         # Modo prueba PROPIO del recordatorio: con activo=true nunca va a los gerentes, aunque
@@ -237,6 +240,8 @@ def c7_daily_reminder() -> dict:
         "modo_prueba": bool(test.get("activo")) and bool(_list(test.get("destinatarios"))),
         "destinatarios_prueba": _dedupe(_list(test.get("destinatarios"))),
         "max_prueba": max_test,
+        # Solo en modo prueba: repetir cada N minutos desde hora_desde (0 = una vez al día).
+        "intervalo_prueba": interval,
         "hora_desde": f"{hour:02d}:{minute:02d}",
         "minuto_del_dia": hour * 60 + minute,
         "copias": _dedupe(_list(data.get("copias"))),
