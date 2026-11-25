@@ -35,11 +35,6 @@ const EMPTY = { rows: [], loading: true, error: "" };
 // Aprobador de directores (David Álava): sus "internas" son las VPN de los directores.
 const DIRECTOR_TITLES = { ...SCOPES, internas: { title: "VPN de directores", lower: "VPN de directores" } };
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
-}
-
 /** Panel del gerente: SUS VPN externas e internas en una sola página. */
 export default function ManagerDashboard() {
   const [boxes, setBoxes] = useState({ externas: EMPTY, internas: EMPTY });
@@ -137,14 +132,14 @@ export default function ManagerDashboard() {
   return (
     <div>
       {director ? <>
-        <div className="rounded-2xl bg-gradient-to-r from-emerald-800 to-slate-900 p-7 text-white shadow-md">
-          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-emerald-200"><Briefcase size={16}/>Validación de VPN de directores</p>
-          <h1 className="mt-2 text-3xl font-bold">{greeting()}{director.nombre ? `, señor ${director.nombre}` : ""}.</h1>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-emerald-50">
+        <div className="rounded-2xl bg-gradient-to-r from-red-800 via-red-600 to-rose-400 p-7 text-white shadow-md">
+          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-100"><Briefcase size={16}/>Validación de VPN de directores</p>
+          <h1 className="mt-2 text-3xl font-bold">Saludos cordiales{director.nombre ? `, señor ${director.nombre}` : ""}.</h1>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-red-50">
             Usted tiene a cargo las VPN de los siguientes directores. Por favor, confirme para cada una si se debe
             <b> Mantener</b>, <b>Eliminar</b> u <b>Otro</b>.</p>
         </div>
-        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+        <div className="mt-6 rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-rose-50 p-5 text-sm text-red-900">
           <ul className="list-disc space-y-2 pl-5">
             <li>Elija la decisión de cada VPN y presione <b>Guardar</b> en la fila, o <b>Guardar todas</b> al final.</li>
             <li>Con <b>Otro</b> escriba el motivo en <b>Observación</b>; la VPN queda en revisión del administrador.</li>

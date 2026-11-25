@@ -17,8 +17,8 @@ const TONES = {
   },
   // Vista del aprobador de directores (David Álava): un solo cuadro "VPN de directores".
   directores: {
-    Icon: Briefcase, label: "Directores", section: "border-emerald-200 border-l-emerald-600", badge: "bg-emerald-100 text-emerald-800",
-    title: "text-emerald-900", head: "bg-emerald-50 text-emerald-900 [&_th]:border-emerald-200", hover: "hover:bg-emerald-50/60",
+    Icon: Briefcase, label: "Directores", section: "border-red-200 border-l-red-600", badge: "bg-red-100 text-red-800",
+    title: "text-red-900", head: "bg-red-50 text-red-900 [&_th]:border-red-200", hover: "hover:bg-red-50/60",
   },
 };
 const TD = "border-b border-slate-100 p-4";
