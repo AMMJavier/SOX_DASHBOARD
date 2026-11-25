@@ -203,7 +203,8 @@
     "7": {
       "copias": [],
       "aviso_gerentes": {
-        "_variables": "{gerente} {campana} {periodo} {cantidad_vpn} {fecha_limite} {linea_portal} {portal} {tabla_vpn}",
+        "_info": "Aviso de apertura: UN solo correo por gerente con el total de sus VPN externas e internas (no se listan las VPN). Lo usan los dos envíos (externas e internas): si el gerente ya recibió el aviso por un lado, el otro no le manda un segundo correo.",
+        "_variables": "{gerente} (nombre completo) {nombre} (solo el nombre, p. ej. Gonzalo) {anio} {semestre} (Primer/Segundo) {campana} {periodo} {lineas_vpn} (líneas con los totales que tenga) {total_externas} {total_internas} {total_vpn} {fecha_limite} (dd/mm/aaaa) {fecha_limite_texto} (24 de julio de 2026) {portal}",
         "modo_prueba": {
           "_info": "Con activo=true los avisos NO van a los gerentes: van a estos destinatarios con asunto [PRUEBA].",
           "activo": true,
@@ -220,21 +221,29 @@
         },
         "_sincronizar_contactos_ldap": "true = al iniciar campaña se actualizan los correos de SOX_GERENTES_CONTACTO desde LDAP (sobrescribe cambios manuales). false = se conservan los correos de la tabla (pruebas).",
         "sincronizar_contactos_ldap": true,
-        "asunto": "SOX Control 7 - Inicio de validación de accesos VPN | {periodo}",
+        "_portal": "Enlace a la plataforma en los correos del Control 7 (si falta, se usa SOX_PORTAL_URL del .env).",
+        "portal": "portalinfraestructura.conecel.com",
+        "asunto": "Control SOX - Soporte VPN {anio} {semestre} Semestre - {gerente}",
         "cuerpo": [
-          "Estimado(a) {gerente}:",
+          "Estimado(a) {nombre},",
           "",
-          "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN (comunidades administradas en Check Point).",
+          "Saludos cordiales,",
           "",
-          "- Período: {periodo}",
-          "- Accesos VPN asociados a usted: {cantidad_vpn}",
-          "- Fecha límite de validación: {fecha_limite}",
+          "En el marco del cumplimiento de controles SOX, estamos llevando a cabo la revisión de la vigencia de los accesos VPN asignados a los usuarios bajo su Gerencia.",
+          "Agradecemos su colaboración confirmando si se requiere mantener la VPN de los usuarios a su cargo:",
           "",
-          "{linea_portal} para revisar cada acceso e indicar si debe mantenerse o eliminarse, agregando observaciones cuando corresponda.",
+          "{lineas_vpn}",
           "",
-          "Este correo es una notificación de apertura. La validación solo queda registrada cuando usted la confirma en el portal.",
+          "Para revisar el detalle e indicar si cada acceso se mantiene o se elimina, ingrese con su cuenta corporativa a la plataforma: {portal}",
           "",
-          "{tabla_vpn}Saludos."
+          "Cabe mencionar que la evidencia es la confirmación registrada por la Gerencia en la plataforma.",
+          "",
+          "La fecha límite para recibir su confirmación es el {fecha_limite_texto}. Pasada esta fecha, en caso de requerir nuevamente el acceso VPN, deberá gestionarse un requerimiento normal a través del sistema Remedy.",
+          "",
+          "Quedamos atentos a su gentil respuesta.",
+          "",
+          "Saludos cordiales,",
+          "CIBERSEGURIDAD OPERATIVA Y REDES • INFRAESTRUCTURA TI"
         ]
       },
       "recordatorio_diario": {

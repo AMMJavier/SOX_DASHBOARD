@@ -18,7 +18,6 @@ from __future__ import annotations  # Python 3.9 en el servidor
 
 from datetime import datetime, timedelta
 from itertools import zip_longest
-import os
 import subprocess
 import threading
 import time
@@ -128,14 +127,14 @@ def _opened(attempts, now_utc):
 def compose(campaign, item, today):
     config = mail_config.c7_daily_reminder()
     deadline = campaign["fecha_limite"]
-    portal = os.getenv("SOX_PORTAL_URL", "").strip()
+    portal = mail_config.c7_notice()["portal"]  # correos.json > aviso_gerentes.portal (o SOX_PORTAL_URL)
     values = {
         "gerente": item["gerente"], "campana": campaign["nombre"],
         "periodo": f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre",
         "pendientes": item["externas"] + item["internas"], "pendientes_externas": item["externas"],
         "pendientes_internas": item["internas"], "fecha_limite": deadline.strftime("%d/%m/%Y"),
         "dias_restantes": (deadline.date() - today).days, "portal": portal,
-        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal.startswith("https://")
+        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal
                          else "Ingrese al portal SOX con su cuenta corporativa"),
     }
     subject = mail_config.render(config["asunto"] or DEFAULT_SUBJECT, **values)

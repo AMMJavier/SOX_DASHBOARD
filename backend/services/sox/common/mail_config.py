@@ -209,13 +209,6 @@ def alert_template(number) -> dict:
     return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
 
 
-def c7_internal_notice() -> dict:
-    """Aviso a gerentes de VPN internas (controles.7.aviso_gerentes_internas). El modo prueba
-    es el mismo de aviso_gerentes. Sin textos, se usan los de internal_notifications.py."""
-    data = control(7).get("aviso_gerentes_internas") or {}
-    return {"asunto": data.get("asunto"), "cuerpo": data.get("cuerpo")}
-
-
 def c7_daily_reminder() -> dict:
     """Recordatorio diario a gerentes con VPN por validar (controles.7.recordatorio_diario).
 
@@ -258,6 +251,8 @@ def c7_notice() -> dict:
         "modo_prueba": bool(test.get("activo")) and bool(_list(test.get("destinatarios"))),
         "destinatarios_prueba": _dedupe(_list(test.get("destinatarios"))),
         "nota_prueba": _text(test.get("nota")),
+        # Enlace a la plataforma en los correos del Control 7 (respaldo: SOX_PORTAL_URL del .env).
+        "portal": str(data.get("portal") or os.getenv("SOX_PORTAL_URL", "")).strip(),
         "asunto": data.get("asunto"),
         "cuerpo": data.get("cuerpo"),
         # false = al iniciar campaña NO se sobrescriben los correos de SOX_GERENTES_CONTACTO desde LDAP

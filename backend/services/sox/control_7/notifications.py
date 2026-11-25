@@ -5,13 +5,14 @@
 - Auditoría: AUTOM.SOX_MAIL_OUTBOX con ORIGEN='CAMPANA' (intento, destinatario y resultado).
 - Sin duplicados: un gerente con aviso ACEPTADO o sin confirmar (PENDIENTE) no vuelve a
   recibirlo; solo los FALLIDO pueden reintentarse, con un nuevo intento auditado.
+- Aviso CONJUNTO: un gerente con VPN externas e internas (mismo correo) recibe UN solo aviso
+  con ambos totales; el envío de internas lo marca como incluido y no le manda otro.
 - El aviso es una notificación de apertura, NO evidencia de revisión: la evidencia sigue
   siendo la validación registrada por el gerente en el portal con su cuenta.
 """
 from datetime import datetime
 from hashlib import sha256
 import logging
-import os
 import re
 import subprocess
 import threading
@@ -142,6 +143,45 @@ def _vpn_table(vpns):
     )
 
 
+# ---------------------------------------------------------------- aviso conjunto (externas + internas)
+
+def joint_groups(db, campaign_id):
+    """Gerentes unidos por su correo REAL: correo de SOX_GERENTES_CONTACTO (externas) y correo
+    LDAP (internas). Devuelve {clave_aviso: {"externas": n, "internas": n, "claves": {...}}}.
+    Una clave sin correo único queda sola (solo con el total de su lado)."""
+    from services.sox.control_7 import internal_notifications as internal
+
+    contacts = _contacts(db)  # siempre los reales, también en modo prueba
+    groups, by_key = {}, {}
+
+    def add(email, key, field, count):
+        group = groups.setdefault(email.casefold() if email else "solo:" + key,
+                                  {"externas": 0, "internas": 0, "claves": set()})
+        group[field] += count
+        group["claves"].add(key)
+        by_key[key] = group
+
+    managers, _, _ = _campaign_managers(db)
+    for key, item in managers.items():
+        found = list(contacts.get(key, {}).values())
+        add(found[0] if len(found) == 1 else None, key, "externas", item["vpn"])
+    managers, _, _ = internal._managers(db, campaign_id)
+    for key, item in managers.items():
+        add(item["correo"] if item["correo"] and not item["ambiguo"] else None, key, "internas", item["vpn"])
+    return by_key
+
+
+def covered(key, groups, attempts):
+    """(estado, "externas"|"internas") si el aviso del MISMO gerente por el otro lado ya salió o
+    está en curso: entonces este no se envía (un solo correo por gerente). None si no."""
+    group = (groups or {}).get(key) or {}
+    for other in sorted(group.get("claves", set()) - {key}):
+        state, _ = _notification_state(attempts.get(other, []))
+        if state in ("ACEPTADO", "PENDIENTE"):
+            return state, ("internas" if other.startswith("int:") else "externas")
+    return None
+
+
 def _contacts(db):
     rows = db.execute(text("""
         SELECT NOMBRE_COMPLETO AS "nombre", CORREO AS "correo"
@@ -227,7 +267,8 @@ def preview(db):
         return {"campana": None, "gerentes": [], "resumen": None, "en_proceso": batch_running()}
     managers, without_manager, total = _campaign_managers(db)
     contacts = {} if modo_prueba() else _contacts(db)
-    sent = _notifications(db, campaign["id"])
+    sent = _notifications(db, campaign["id"])  # incluye los avisos de internas ("int:...")
+    groups = joint_groups(db, campaign["id"])
     items = []
     for key, item in sorted(managers.items(), key=lambda kv: kv[1]["gerente"]):
         contact_state, emails = _resolve_contact(contacts, key)
@@ -235,6 +276,7 @@ def preview(db):
         all_attempts = sent.get(key, [])
         attempts = _for_current_email(all_attempts, emails)
         state, _ = _notification_state(attempts)
+        joint = covered(key, groups, sent) if state in (None, "FALLIDO") else None
         count = len(all_attempts)
         last = attempts[-1] if attempts else None
         changed = bool(all_attempts) and not attempts and bool(emails)
@@ -242,11 +284,12 @@ def preview(db):
             "gerente": item["gerente"], "clave": _key_hash(key), "vpn": item["vpn"],
             "pendientes": item["vpn"] - item["confirmadas"], "correo": email,
             "correos_encontrados": len(emails), "contacto": contact_state,
-            "notificacion": state, "intentos": count,
-            "detalle": (f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
+            "notificacion": joint[0] if joint else state, "intentos": count,
+            "detalle": (f"Incluido en el aviso de VPN {joint[1]} (un solo correo por gerente)" if joint else
+                        f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
                         if changed else (last["detalle"] if last else None)),
             "fecha_envio": _fmt(last["fecha_envio"]) if last else None,
-            "enviable": contact_state == READY and _can_send(state),
+            "enviable": contact_state == READY and not joint and _can_send(state),
         })
     summary = {
         "gerentes": len(items),
@@ -268,38 +311,78 @@ def preview(db):
 
 # ---------------------------------------------------------------- mensaje
 
-DEFAULT_SUBJECT = "SOX Control 7 - Inicio de validación de accesos VPN | {periodo}"
+DEFAULT_SUBJECT = "Control SOX - Soporte VPN {anio} {semestre} Semestre - {gerente}"
 DEFAULT_BODY = (
-    "Estimado(a) {gerente}:\n\n"
-    "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN "
-    "(comunidades administradas en Check Point).\n\n"
-    "- Período: {periodo}\n"
-    "- Accesos VPN asociados a usted: {cantidad_vpn}\n"
-    "- Fecha límite de validación: {fecha_limite}\n\n"
-    "{linea_portal} para revisar cada acceso e indicar si debe mantenerse o eliminarse, "
-    "agregando observaciones cuando corresponda.\n\n"
-    "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
-    "usted la confirma en el portal.\n\n"
-    "{tabla_vpn}"
-    "Saludos."
+    "Estimado(a) {nombre},\n\n"
+    "Saludos cordiales,\n\n"
+    "En el marco del cumplimiento de controles SOX, estamos llevando a cabo la revisión de la vigencia de "
+    "los accesos VPN asignados a los usuarios bajo su Gerencia.\n"
+    "Agradecemos su colaboración confirmando si se requiere mantener la VPN de los usuarios a su cargo:\n\n"
+    "{lineas_vpn}\n\n"
+    "Para revisar el detalle e indicar si cada acceso se mantiene o se elimina, ingrese con su cuenta "
+    "corporativa a la plataforma: {portal}\n\n"
+    "Cabe mencionar que la evidencia es la confirmación registrada por la Gerencia en la plataforma.\n\n"
+    "La fecha límite para recibir su confirmación es el {fecha_limite_texto}. Pasada esta fecha, en caso de "
+    "requerir nuevamente el acceso VPN, deberá gestionarse un requerimiento normal a través del sistema Remedy.\n\n"
+    "Quedamos atentos a su gentil respuesta.\n\n"
+    "Saludos cordiales,\n"
+    "CIBERSEGURIDAD OPERATIVA Y REDES • INFRAESTRUCTURA TI"
 )
 DEFAULT_TEST_NOTE = ("*** CORREO DE PRUEBA ***\nEste aviso corresponde al gerente: {gerente}.\n"
                      "No se envió al gerente: el sistema está en modo prueba con destinatarios fijos.\n\n")
 
 
-def compose(campaign, manager_name, vpn_count, vpns=None):
-    """Asunto y cuerpo del aviso; los textos salen de correos.json > controles.7.aviso_gerentes."""
+NL = chr(10)  # Python 3.9: sin barras invertidas dentro de los f-strings
+MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+          "octubre", "noviembre", "diciembre")
+
+
+def _first_name(display):
+    """ "COM Gonzalo Chicaiza" -> "Gonzalo" (quita el prefijo de área en mayúsculas)."""
+    words = str(display or "").split()
+    if len(words) > 1 and words[0].isupper() and len(words[0]) <= 4:
+        words = words[1:]
+    return words[0] if words else ""
+
+
+def vpn_lines(externas, internas):
+    """Solo los tipos que el gerente tiene: una línea por tipo (sin listar cada VPN)."""
+    lines = []
+    if externas:
+        lines.append(f"- VPN externas: {externas}")
+    if internas:
+        lines.append(f"- VPN internas: {internas}")
+    if externas and internas:
+        lines.append(f"- Total de VPN: {externas + internas}")
+    return NL.join(lines)
+
+
+def compose(campaign, manager_name, vpn_count, vpns=None, totals=None):
+    """Asunto y cuerpo del aviso de apertura (UNO por gerente, externas e internas).
+
+    Los textos salen de correos.json > controles.7.aviso_gerentes. totals = {"externas", "internas"}
+    del gerente (joint_groups); sin totals se usa vpn_count como total de externas.
+    """
     config = mail_config.c7_notice()
+    totals = totals or {"externas": vpn_count, "internas": 0}
+    externas, internas = int(totals.get("externas") or 0), int(totals.get("internas") or 0)
     deadline = campaign["fecha_limite"]
     deadline_txt = deadline.strftime("%d/%m/%Y") if isinstance(deadline, datetime) else str(deadline or "por confirmar")
-    period = f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre"
-    portal = os.getenv("SOX_PORTAL_URL", "").strip()
+    deadline_long = (f"{deadline.day} de {MONTHS[deadline.month - 1]} de {deadline.year}"
+                     if isinstance(deadline, datetime) else deadline_txt)
+    semester = "Primer" if int(campaign["semestre"]) == 1 else "Segundo"
+    period = f"{campaign['anio']} - {semester.lower()} semestre"
+    portal = config["portal"]
     values = {
-        "gerente": manager_name, "campana": campaign["nombre"], "periodo": period,
-        "cantidad_vpn": vpn_count, "fecha_limite": deadline_txt, "portal": portal,
-        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal.startswith("https://")
+        "gerente": manager_name, "nombre": _first_name(manager_name) or manager_name,
+        "campana": campaign["nombre"], "periodo": period, "anio": campaign["anio"], "semestre": semester,
+        "total_externas": externas, "total_internas": internas, "total_vpn": externas + internas,
+        "lineas_vpn": vpn_lines(externas, internas),
+        "cantidad_vpn": vpn_count, "fecha_limite": deadline_txt, "fecha_limite_texto": deadline_long,
+        "portal": portal,
+        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal
                          else "Ingrese al portal SOX con su cuenta corporativa"),
-        "tabla_vpn": f"Sus VPN ({len(vpns)}):\n\n{_vpn_table(vpns)}\n\n" if vpns else "",
+        "tabla_vpn": f"Sus VPN ({len(vpns)}):{NL}{NL}{_vpn_table(vpns)}{NL}{NL}" if vpns else "",
     }
     subject = mail_config.render(config["asunto"] or DEFAULT_SUBJECT, **values)
     body = mail_config.render(config["cuerpo"] or DEFAULT_BODY, **values)
@@ -364,21 +447,23 @@ def run_batch(campaign_id, claves, user_id, username):
         wanted = set(claves)
         managers, _, _ = _campaign_managers(db)
         vpns = _vpns_by_manager(db)
+        groups = joint_groups(db, campaign_id)
         for key, item in managers.items():
             if _key_hash(key) not in wanted:
                 continue
             # Se recalcula por gerente: otro proceso pudo haberlo notificado mientras tanto.
-            current = preview_one(db, campaign, key, item)
+            current = preview_one(db, campaign, key, item, groups)
             if not current:
                 skipped += 1
-                mail.console(f"AVISO C7 OMITIDO | gerente={item['gerente']!r}: sin contacto válido o ya notificado en su correo actual")
+                mail.console(f"AVISO C7 OMITIDO | gerente={item['gerente']!r}: sin contacto válido, ya notificado "
+                             f"en su correo actual o incluido en el aviso de internas")
                 continue
             start_one = time.monotonic()
             mail.console(f"AVISO C7 INICIO | gerente={item['gerente']!r} para={current['correo']} "
                          f"vpn={item['vpn']} intento={current['intento']}")
             try:
                 ok = _send_one(db, campaign, item, current["correo"], current["intento"], user_id, username,
-                               vpns.get(key, []))
+                               vpns.get(key, []), groups.get(key))
                 sent += 1 if ok else 0
                 failed += 0 if ok else 1
                 mail.console(f"AVISO C7 {'ENVIADO' if ok else 'NO ENVIADO'} en {mail.elapsed(start_one)} | gerente={item['gerente']!r}")
@@ -396,15 +481,18 @@ def run_batch(campaign_id, claves, user_id, username):
         logger.info("Lote C7 campaña %s: enviados=%s fallidos=%s omitidos=%s", campaign_id, sent, failed, skipped)
 
 
-def preview_one(db, campaign, key, item):
+def preview_one(db, campaign, key, item, groups=None):
     contacts = {} if modo_prueba() else _contacts(db)
     contact_state, emails = _resolve_contact(contacts, key)
     if contact_state != READY:
         return None
-    all_attempts = _notifications(db, campaign["id"]).get(key, [])
+    sent = _notifications(db, campaign["id"])
+    all_attempts = sent.get(key, [])
     state, _ = _notification_state(_for_current_email(all_attempts, emails))
     if not _can_send(state):
         return None
+    if state in (None, "FALLIDO") and covered(key, groups, sent):
+        return None  # ya recibió el aviso conjunto por el lado de internas
     # El número de intento cuenta TODOS los registros del gerente en la campaña (pruebas y reales):
     # así la clave de idempotencia C7-<campaña>-<gerente>-<intento> nunca choca con una anterior.
     return {"correo": emails, "intento": _attempts_total(db, campaign["id"], key) + 1}
@@ -417,8 +505,8 @@ def _attempts_total(db, campaign_id, key):
     """), {"p_camp": campaign_id, "p_key": key[:200]}).scalar() or 0)
 
 
-def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None):
-    subject, body = compose(campaign, item["gerente"], item["vpn"], vpns)
+def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None, totals=None):
+    subject, body = compose(campaign, item["gerente"], item["vpn"], vpns, totals)
     taken = {x.casefold() for x in emails}
     copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     email = ", ".join(emails)

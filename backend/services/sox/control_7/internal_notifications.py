@@ -9,12 +9,11 @@ Diferencias:
   - Correo: el de LDAP guardado en GERENTE_CORREO (sin buscar por nombre: no hay ambigüedad).
   - GERENTE_KEY = "int:<usuario>" y TIPO_EVIDENCIA = 'notificacion_interna': los avisos de
     internas no se mezclan con los de externas aunque sea el mismo gerente.
-  - Textos: correos.json > controles.7.aviso_gerentes_internas (asunto / cuerpo).
+  - Textos: los MISMOS del aviso de externas (correos.json > controles.7.aviso_gerentes): un solo
+    correo por gerente con el total de VPN externas e internas. Si el gerente ya recibió el aviso por
+    el lado de externas, aquí figura como incluido y no se le envía otro.
 """
-from datetime import datetime
 import logging
-import os
-import re
 import subprocess
 import threading
 import time
@@ -31,7 +30,6 @@ from services.sox.control_7 import notifications as ext
 logger = logging.getLogger(__name__)
 _batch_lock = threading.Lock()
 KEY_PREFIX = "int:"
-ACCESS = {"RDP": "RDP", "APLICACIONES": "Aplicaciones"}
 
 
 def batch_running():
@@ -75,15 +73,6 @@ def _managers(db, campaign_id):
     return managers, int(counts[1] or 0), int(counts[0] or 0)
 
 
-def _accounts(db, campaign_id, usuario):
-    return [dict(r) for r in db.execute(text("""
-        SELECT USUARIO AS "usuario", NOMBRE AS "nombre", TIPO_ACCESO AS "tipo"
-          FROM AUTOM.SOX_C7_VPN_INTERNAS
-         WHERE ID_CAMPANA = :p_camp AND LOWER(GERENTE_USUARIO) = LOWER(:p_user)
-         ORDER BY NOMBRE, USUARIO, TIPO_ACCESO
-    """), {"p_camp": campaign_id, "p_user": usuario}).mappings()]
-
-
 def _contact(item):
     """(estado_contacto, correos) con la misma lista blanca y modo prueba que externas."""
     if ext.modo_prueba():
@@ -114,7 +103,7 @@ def _attempts(db, campaign_id):
     return result
 
 
-def _row(item, attempts_by_key):
+def _row(item, attempts_by_key, groups=None, all_attempts_by_key=None):
     contact_state, emails = _contact(item)
     all_attempts = attempts_by_key.get(item["key"], [])
     # Avisos anteriores a la última asignación manual: no cuentan (se puede volver a notificar).
@@ -124,17 +113,21 @@ def _row(item, attempts_by_key):
         all_attempts = [a for a in all_attempts if a["fecha_solicitud"] and a["fecha_solicitud"] >= since]
     attempts = ext._for_current_email(all_attempts, emails)
     state, _ = ext._notification_state(attempts)
+    # Aviso conjunto: si ya salió el de externas al mismo gerente, este no se envía.
+    joint = (ext.covered(item["key"], groups, all_attempts_by_key or {})
+             if groups is not None and state in (None, "FALLIDO") else None)
     last = attempts[-1] if attempts else None
     changed = bool(all_attempts) and not attempts and bool(emails)
     return {
         "gerente": item["gerente"], "clave": ext._key_hash(item["key"]), "vpn": item["vpn"],
         "pendientes": item["vpn"] - item["confirmadas"], "correo": ", ".join(emails) if emails else None,
-        "contacto": contact_state, "notificacion": state, "intentos": len(all_attempts),
-        "detalle": (f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
+        "contacto": contact_state, "notificacion": joint[0] if joint else state, "intentos": len(all_attempts),
+        "detalle": (f"Incluido en el aviso de VPN {joint[1]} (un solo correo por gerente)" if joint else
+                    f"Correo cambió desde el último aviso (antes: {all_attempts[-1]['correo']})"
                     if changed else (last["detalle"] if last else
                                      ("Se le asignaron cuentas a mano después del último aviso" if reset else None))),
         "fecha_envio": ext._fmt(last["fecha_envio"]) if last else None,
-        "enviable": contact_state == ext.READY and ext._can_send(state),
+        "enviable": contact_state == ext.READY and not joint and ext._can_send(state),
         "_emails": emails,
     }
 
@@ -145,7 +138,8 @@ def preview(db):
         return {"campana": None, "gerentes": [], "resumen": None, "en_proceso": batch_running()}
     managers, without_manager, total = _managers(db, campaign["id"])
     attempts = _attempts(db, campaign["id"])
-    items = [_row(item, attempts) for item in sorted(managers.values(), key=lambda x: x["gerente"])]
+    groups, everything = ext.joint_groups(db, campaign["id"]), ext._notifications(db, campaign["id"])
+    items = [_row(item, attempts, groups, everything) for item in sorted(managers.values(), key=lambda x: x["gerente"])]
     summary = {
         "gerentes": len(items), "listos": sum(x["enviable"] for x in items),
         "notificados": sum(x["notificacion"] == "ACEPTADO" for x in items),
@@ -165,47 +159,9 @@ def preview(db):
 
 # ---------------------------------------------------------------- mensaje
 
-DEFAULT_SUBJECT = "SOX Control 7 - Inicio de validación de accesos VPN internos | {periodo}"
-DEFAULT_BODY = (
-    "Estimado(a) {gerente}:\n\n"
-    "Se ha iniciado la campaña \"{campana}\" de validación semestral de accesos VPN internos "
-    "(grupos RDP y Aplicaciones) de las personas que dependen de usted en Active Directory.\n\n"
-    "- Período: {periodo}\n"
-    "- Accesos internos asociados a usted: {cantidad_vpn}\n"
-    "- Fecha límite de validación: {fecha_limite}\n\n"
-    "{linea_portal}, vaya al cuadro VPN internas y revise cada acceso indicando si debe mantenerse o "
-    "eliminarse, con observaciones cuando corresponda.\n\n"
-    "Este correo es una notificación de apertura. La validación solo queda registrada cuando "
-    "usted la confirma en el portal.\n\n"
-    "{tabla_vpn}"
-    "Saludos."
-)
-
-
-def compose(campaign, manager_name, count, accounts):
-    config = mail_config.c7_internal_notice()
-    base = mail_config.c7_notice()
-    deadline = campaign["fecha_limite"]
-    deadline_txt = deadline.strftime("%d/%m/%Y") if isinstance(deadline, datetime) else str(deadline or "por confirmar")
-    period = f"{campaign['anio']} - {'primer' if int(campaign['semestre']) == 1 else 'segundo'} semestre"
-    portal = os.getenv("SOX_PORTAL_URL", "").strip()
-    def clean(value):  # Python 3.9: sin barras invertidas dentro de los f-strings.
-        return re.sub(r"\s+", " ", str(value or "-")).strip() or "-"
-    lines = "\n".join(f"- {a['usuario']} | {clean(a['nombre'])} | {ACCESS.get(a['tipo'], a['tipo'])}"
-                      for a in accounts)
-    values = {
-        "gerente": manager_name, "campana": campaign["nombre"], "periodo": period, "cantidad_vpn": count,
-        "fecha_limite": deadline_txt, "portal": portal,
-        "linea_portal": (f"Ingrese al portal SOX ({portal}) con su cuenta corporativa" if portal.startswith("https://")
-                         else "Ingrese al portal SOX con su cuenta corporativa"),
-        "tabla_vpn": f"Accesos internos ({len(accounts)}):\n\n{lines}\n\n" if accounts else "",
-    }
-    subject = mail_config.render(config["asunto"] or DEFAULT_SUBJECT, **values)
-    body = mail_config.render(config["cuerpo"] or DEFAULT_BODY, **values)
-    if ext.modo_prueba():
-        subject = f"[PRUEBA] {subject}"
-        body = mail_config.render(base["nota_prueba"] or ext.DEFAULT_TEST_NOTE, **values) + body
-    return " ".join(subject.split())[:200], body
+def compose(campaign, manager_name, count, accounts=None, totals=None):
+    """Mismo asunto y cuerpo que el aviso de externas (aviso conjunto, solo totales)."""
+    return ext.compose(campaign, manager_name, count, totals=totals or {"externas": 0, "internas": count})
 
 
 # ---------------------------------------------------------------- envío
@@ -236,16 +192,17 @@ def run_batch(campaign_id, claves, user_id, username):
             return
         wanted = set(claves)
         managers, _, _ = _managers(db, campaign_id)
+        groups = ext.joint_groups(db, campaign_id)
         for key, item in managers.items():
             if ext._key_hash(key) not in wanted:
                 continue
-            current = _row(item, _attempts(db, campaign_id))  # Se recalcula: otro proceso pudo notificarlo.
+            # Se recalcula: otro proceso (o el aviso de externas) pudo notificarlo mientras tanto.
+            current = _row(item, _attempts(db, campaign_id), groups, ext._notifications(db, campaign_id))
             if not current["enviable"]:
                 skipped += 1
                 continue
             try:
-                ok = _send_one(db, campaign, item, current["_emails"], user_id, username,
-                               _accounts(db, campaign_id, item["usuario"]))
+                ok = _send_one(db, campaign, item, current["_emails"], user_id, username, groups.get(key))
                 sent += 1 if ok else 0
                 failed += 0 if ok else 1
                 mail.console(f"AVISO C7 INTERNAS {'ENVIADO' if ok else 'NO ENVIADO'} | gerente={item['gerente']!r}")
@@ -261,8 +218,8 @@ def run_batch(campaign_id, claves, user_id, username):
                      f"{time.monotonic() - start:.2f}s")
 
 
-def _send_one(db, campaign, item, emails, user_id, username, accounts):
-    subject, body = compose(campaign, item["gerente"], item["vpn"], accounts)
+def _send_one(db, campaign, item, emails, user_id, username, totals=None):
+    subject, body = compose(campaign, item["gerente"], item["vpn"], totals=totals)
     taken = {x.casefold() for x in emails}
     copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     correlation = uuid4().hex
