@@ -4,6 +4,7 @@ import { readStoredUser } from "../../../services/authSession";
 import { getCampaignNotifications, sendCampaignNotifications } from "../../../services/sox/control_7/campaignService";
 import { formatDateTime } from "../../../utils/dateTime";
 import Pagination from "../../common/Pagination";
+import ConfirmModal from "../../common/ConfirmModal";
 
 const CONTACT = {
   LISTO: { label: "Correo encontrado", className: "text-emerald-700" },
@@ -47,6 +48,8 @@ export default function CampaignNotifications({
   const [page, setPage] = useState(1);
   const [managerFilter, setManagerFilter] = useState("");
   const [managerText, setManagerText] = useState("");
+  // Envío pendiente de confirmar: null = todos los pendientes, [clave] = un gerente.
+  const [confirmSend, setConfirmSend] = useState(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,9 +79,7 @@ export default function CampaignNotifications({
   const shownManagers = byList.filter((g) => words.every((w) => plain(`${g.gerente} ${g.correo || ""}`).includes(w)));
 
   async function send(claves = null) {
-    const total = claves ? claves.length : pending.length;
-    const ok = window.confirm(`Se enviará un correo REAL a ${total} gerente(s) de la campaña "${data.campana.nombre}" con su cantidad de ${itemLabel} y la fecha límite.\n\nLos gerentes ya notificados no recibirán otro aviso. ¿Confirmas el envío?`);
-    if (!ok) return;
+    setConfirmSend(undefined);
     setMessage(null);
     try {
       const result = await sendData(claves);
@@ -98,7 +99,7 @@ export default function CampaignNotifications({
           <button type="button" onClick={load} disabled={loading} className="flex h-11 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""}/>Actualizar
           </button>
-          <button type="button" onClick={() => send()} disabled={!data?.envio_habilitado || data?.en_proceso || pending.length === 0}
+          <button type="button" onClick={() => setConfirmSend(null)} disabled={!data?.envio_habilitado || data?.en_proceso || pending.length === 0}
             className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
             <Send size={16}/>{data?.en_proceso ? "Enviando..." : `Notificar pendientes (${pending.length})`}
           </button>
@@ -161,7 +162,7 @@ export default function CampaignNotifications({
                 {g.detalle && <p className="text-xs text-slate-500">{g.detalle}</p>}
                 {g.intentos > 1 && <p className="text-xs text-slate-500">{g.intentos} intentos</p>}</td>
               <td className="border-b p-3">{g.enviable && <button type="button" disabled={!data.envio_habilitado || data.en_proceso}
-                onClick={() => send([g.clave])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50">
+                onClick={() => setConfirmSend([g.clave])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50">
                 {g.notificacion === "FALLIDO" ? "Reintentar" : "Enviar"}</button>}</td>
             </tr>;
           })}
@@ -170,6 +171,15 @@ export default function CampaignNotifications({
           <Pagination currentPage={page} totalPages={Math.ceil(shownManagers.length / PAGE_SIZE)} onPageChange={setPage}/>
         </div>}
       </div>}
+
+      {confirmSend !== undefined && <ConfirmModal title="¿Está seguro de que quiere enviar las notificaciones a los gerentes?" icon={Send}
+        confirmLabel="Sí, enviar" onClose={() => setConfirmSend(undefined)} onConfirm={() => send(confirmSend)}>
+        <p>Se enviará un correo {data?.modo_prueba ? "de prueba" : <b>REAL</b>} a{" "}
+          <b>{confirmSend ? (all.find((g) => g.clave === confirmSend[0])?.gerente || "1 gerente") : `${pending.length} gerente(s)`}</b> de la
+          campaña <b>{data?.campana?.nombre}</b> con su cantidad de {itemLabel} y la fecha límite.</p>
+        <p>Los gerentes ya notificados no recibirán otro aviso.</p>
+        {data?.modo_prueba && <p className="rounded-lg bg-violet-50 p-3 font-semibold text-violet-800">Modo prueba: los correos llegan a {data.correos_prueba?.join(", ")}, no a los gerentes.</p>}
+      </ConfirmModal>}
     </div>
   );
 }

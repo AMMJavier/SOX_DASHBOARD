@@ -7,7 +7,7 @@ import { exportToExcel } from "../../../utils/sox/control_7/exportExcel";
 import { exportToPdf } from "../../../utils/sox/control_7/exportPdf";
 import { CAMPAIGN_COLUMNS } from "../../../utils/sox/control_7/exportColumns";
 import { registerExport } from "../../../utils/sox/control_7/registerExport";
-import { closeActiveCampaign, getCampaignValidations } from "../../../services/sox/control_7/campaignService";
+import { getCampaignValidations } from "../../../services/sox/control_7/campaignService";
 import CampaignNotifications from "../../../components/SOX/control_7/CampaignNotifications";
 
 // Mismo formato que la campaña de VPN internas: Estado (semáforo) y Decisión por separado.
@@ -50,26 +50,6 @@ const rowsPerPage = 80;
     );
     setManagers(response.data.managers);
 }
-
-  const handleCloseCampaign = async () => {
-    const confirmClose = window.confirm(
-      "¿Está seguro de cerrar la campaña activa? Los registros pasarán al histórico y se creará una nueva campaña."
-    );
-
-    if (!confirmClose) return;
-
-    try {
-      await closeActiveCampaign({
-
-      });
-
-      alert("Campaña cerrada correctamente.");
-      window.location.reload();
-    } catch (error) {
-      console.error(error);
-      alert("Error al cerrar la campaña.");
-    }
-  };
 
   const filteredValidations = validations.filter((item) => {
     const text = `
@@ -162,14 +142,6 @@ return (
               />
 
             </div>
-
-
-            <button
-              onClick={handleCloseCampaign}
-              className="h-11 rounded-lg bg-slate-900 px-5 text-sm font-bold text-white hover:bg-slate-800"
-            >
-              Cerrar campaña
-            </button>
 
 
             <button

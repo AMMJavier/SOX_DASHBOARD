@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Bell, RefreshCw, X } from "lucide-react";
-import { getActiveCampaign, startCampaign, syncCampaign } from "../../../services/sox/control_7/campaignService";
+import { AlertTriangle, Archive, Bell, Play, RefreshCw, X } from "lucide-react";
+import { closeActiveCampaign, getActiveCampaign, startCampaign, syncCampaign } from "../../../services/sox/control_7/campaignService";
 import { readStoredUser, logout } from "../../../services/authSession";
 import { useLocation } from "react-router-dom";
 import ControlSelector from "./ControlSelector";
 import controlConfig from "../../../constants/controlConfig";
+import ConfirmModal from "../../common/ConfirmModal";
 
 export default function Navbar({ module }) {
   const [campaign, setCampaign] = useState(null);
@@ -12,6 +13,8 @@ export default function Navbar({ module }) {
   const [loadingCampaign, setLoadingCampaign] = useState(true);
   const [error, setError] = useState("");
   const [confirmSync, setConfirmSync] = useState(false);
+  // "start" | "close": ventana de confirmación de Iniciar / Cerrar campaña.
+  const [confirmAction, setConfirmAction] = useState(null);
   const location = useLocation();
   const match = location.pathname.match(/Control_(\d+)/);
   const control = controlConfig[match?.[1]];
@@ -42,7 +45,7 @@ export default function Navbar({ module }) {
     return () => clearInterval(interval);
   }, [isCampaignControl, loadCampaign]);
 
-  const handleCampaignAction = async (action) => {
+  const handleCampaignAction = async (action, reload = false) => {
     setActionLoading(true);
     setError("");
     try {
@@ -50,6 +53,8 @@ export default function Navbar({ module }) {
       await loadCampaign();
       // El backend responde success=false si, por ejemplo, falló la sincronización con Check Point.
       if (result && result.success === false) setError(result.message || "No se pudo completar la operación de campaña");
+      // Iniciar / cerrar cambian los datos de toda la página (externas e internas): se recarga.
+      else if (reload) window.location.reload();
     } catch (err) {
       setError(err.response?.data?.detail || "No se pudo completar la operación de campaña");
     } finally {
@@ -65,8 +70,11 @@ export default function Navbar({ module }) {
           <span className="text-sm font-bold">Campaña activa:</span>
           <div className="min-w-[220px] rounded-md border bg-white px-4 py-2">{loadingCampaign ? "Cargando campaña" : error ? "No disponible" : campaign?.name || "Sin campaña activa"}</div>
           {canManageCampaign && (campaign ?
-            <button onClick={() => setConfirmSync(true)} disabled={actionLoading} className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Actualizando..." : "Actualizar campaña"}</button> :
-            <button onClick={() => handleCampaignAction(startCampaign)} disabled={actionLoading} className="rounded-md bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Iniciando..." : "Iniciar campaña"}</button>
+            <>
+              <button onClick={() => setConfirmSync(true)} disabled={actionLoading} className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Procesando..." : "Actualizar campaña"}</button>
+              <button onClick={() => setConfirmAction("close")} disabled={actionLoading} className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60">Cerrar campaña</button>
+            </> :
+            <button onClick={() => setConfirmAction("start")} disabled={actionLoading || loadingCampaign} className="rounded-md bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-60">{actionLoading ? "Iniciando..." : "Iniciar campaña"}</button>
           )}
         </>}
         {error && <span role="alert" className="max-w-xs text-sm text-red-700">{String(error)}</span>}
@@ -79,6 +87,19 @@ export default function Navbar({ module }) {
       </div>
       {confirmSync && <SyncCampaignModal name={campaign?.name} onClose={() => setConfirmSync(false)}
         onConfirm={() => { setConfirmSync(false); handleCampaignAction(syncCampaign); }}/>}
+      {confirmAction === "start" && <ConfirmModal title="¿Está seguro de iniciar una nueva campaña?" icon={Play} tone="green"
+        confirmLabel="Sí, iniciar campaña" onClose={() => setConfirmAction(null)}
+        onConfirm={() => { setConfirmAction(null); handleCampaignAction(startCampaign, true); }}>
+        <p>Se creará la campaña del semestre actual y se cargarán las VPN externas (Check Point) y las VPN internas (LDAP).</p>
+        <p className="rounded-lg bg-blue-50 p-3 font-semibold text-blue-800">No se enviará ningún correo a los gerentes. Los avisos se envían
+          después, desde Campañas con el botón "Notificar pendientes".</p>
+      </ConfirmModal>}
+      {confirmAction === "close" && <ConfirmModal title="¿Está seguro de cerrar la campaña activa?" icon={Archive} tone="slate"
+        confirmLabel="Sí, cerrar campaña" onClose={() => setConfirmAction(null)}
+        onConfirm={() => { setConfirmAction(null); handleCampaignAction(closeActiveCampaign, true); }}>
+        <p>La campaña <b>{campaign?.name || "activa"}</b> se cerrará y sus registros pasarán al histórico.</p>
+        <p className="rounded-lg bg-amber-50 p-3 font-semibold text-amber-800">Esta acción no se puede deshacer.</p>
+      </ConfirmModal>}
     </header>
   );
 }

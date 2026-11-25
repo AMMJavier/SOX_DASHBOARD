@@ -183,7 +183,7 @@ export default function ManagerDashboard() {
           expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tiene VPNs asignadas en esta campaña."
           onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
       </> : <>
-      {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
+      {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["REQ", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
         expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes VPN externas asignadas a tu usuario en esta campaña."
         onChange={change("externas")} onSave={saveOne("externas")} onTouch={touch("externas")}/>}
 
