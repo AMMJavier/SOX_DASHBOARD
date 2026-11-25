@@ -17,6 +17,7 @@ Configuración: correos.json > controles.7.recordatorio_diario (apagado por defe
 from __future__ import annotations  # Python 3.9 en el servidor
 
 from datetime import datetime, timedelta
+from itertools import zip_longest
 import os
 import subprocess
 import threading
@@ -241,9 +242,10 @@ def run_once(now=None, db=None):
         test_only = own_test()
         # En prueba con intervalo: una ronda cada N minutos desde hora_desde (clave AAAAMMDD-ronda).
         interval = config["intervalo_prueba"] if test_only else 0
-        stamp = f"{today:%Y%m%d}"
+        stamp, round_no = f"{today:%Y%m%d}", 0
         if interval:
-            stamp += f"-{(now.hour * 60 + now.minute - config['minuto_del_dia']) // interval}"
+            round_no = (now.hour * 60 + now.minute - config["minuto_del_dia"]) // interval
+            stamp += f"-{round_no}"
         if _done == (campaign["id"], stamp):
             return 0
         deadline = campaign["fecha_limite"]
@@ -258,7 +260,17 @@ def run_once(now=None, db=None):
         limit = config["max_prueba"] if test_only else 0
         start, now_utc = time.monotonic(), mail._now()
         sent = failed = not_opened = already = capped = 0
-        for item in sorted(pending.values(), key=lambda x: x["gerente"]):
+        items = sorted(pending.values(), key=lambda x: x["gerente"])
+        if limit and items:
+            # Prueba con tope: se intercalan gerentes con VPN externas y solo internas, y cada ronda
+            # sigue donde quedó la anterior, para que con el tiempo salgan todos.
+            with_ext = [x for x in items if x["externas"]]
+            only_int = [x for x in items if not x["externas"]]
+            items = [x for pair in zip_longest(with_ext, only_int) for x in pair if x is not None]
+            offset = (round_no * limit) % len(items)
+            items = items[offset:] + items[:offset]
+        names = []
+        for item in items:
             if not test_only and not any(_opened(notices.get(key, []), now_utc) for key in item["claves"]):
                 not_opened += 1
                 continue
@@ -271,6 +283,8 @@ def run_once(now=None, db=None):
                 db.rollback()
                 ok = False
                 mail.console(f"RECORDATORIO C7 ERROR | gerente={item['gerente']!r}: {type(exc).__name__}: {exc}")
+            if ok is True:
+                names.append(f"{item['gerente']} (ext={item['externas']} int={item['internas']})")
             sent += ok is True
             failed += ok is False
             already += ok is None
@@ -279,7 +293,8 @@ def run_once(now=None, db=None):
             f"RECORDATORIO C7 FIN | campaña={campaign['id']} ronda={stamp} modo={'PRUEBA' if is_test() else 'REAL'} "
             f"con_pendientes={len(pending)} enviados={sent} fallidos={failed} omitidos={already} "
             f"sobre_limite_prueba={capped} "
-            f"sin_aviso_de_apertura={not_opened} sin_correo={len(without_mail)} | {mail.elapsed(start)}")
+            f"sin_aviso_de_apertura={not_opened} sin_correo={len(without_mail)} | {mail.elapsed(start)}"
+            + (f" | enviados a: {'; '.join(names)}" if names and is_test() else ""))
         return sent
     finally:
         if own_db and db is not None:
