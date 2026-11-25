@@ -256,7 +256,11 @@ def list_for_manager(db, username):
         WHERE ID_CAMPANA = :p_camp AND LOWER(GERENTE_USUARIO) = LOWER(:p_user)
         ORDER BY TIPO_ACCESO, NOMBRE, USUARIO
     """), {"p_camp": campaign["id"], "p_user": username}))
-    # El aprobador de directores ve una página propia ("VPN de directores") con un saludo.
+    # El aprobador de directores ve una página propia con dos cuadros: "VPN de directores" (las que
+    # LDAP le asignó por la regla de directores) y "VPN de colaboradores" (las que se le asignaron a
+    # mano: cuentas que no son de directores pero que también valida él).
+    for item in items:
+        item["director"] = bool(approver) and not item.get("gerente_manual")
     return {"campana": campaign, "items": items, "aprobador_directores": approver, "demo": demo,
             "nombre_saludo": _first_name(items[0]["gerente"]) if approver and items else ""}
 

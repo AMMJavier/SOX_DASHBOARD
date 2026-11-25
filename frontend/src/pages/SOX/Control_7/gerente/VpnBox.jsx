@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Briefcase, Globe, Lock, Network, Save } from "lucide-react";
+import { Briefcase, Globe, Lock, Network, Save, Users } from "lucide-react";
 import Pagination from "../../../../components/common/Pagination";
 import { CONFIRMED, DECISIONS, PENDING, REPORTED, summarize } from "./vpnRows";
 
@@ -19,6 +19,11 @@ const TONES = {
   directores: {
     Icon: Briefcase, label: "Directores", section: "border-red-200 border-l-red-600", badge: "bg-red-100 text-red-800",
     title: "text-red-900", head: "bg-red-50 text-red-900 [&_th]:border-red-200", hover: "hover:bg-red-50/60",
+  },
+  // Mismo aprobador: VPN de colaboradores (no directores) que se le asignaron a mano.
+  colaboradores: {
+    Icon: Users, label: "Colaboradores", section: "border-rose-200 border-l-rose-400", badge: "bg-rose-100 text-rose-800",
+    title: "text-rose-900", head: "bg-rose-50 text-rose-900 [&_th]:border-rose-200", hover: "hover:bg-rose-50/60",
   },
 };
 const TD = "border-b border-slate-100 p-4";

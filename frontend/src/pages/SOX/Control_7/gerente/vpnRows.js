@@ -28,6 +28,7 @@ export function internalRow(x) {
   const status = x.confirmacion === 1 ? CONFIRMED : reported ? REPORTED : PENDING;
   return {
     id: x.id, cells: [x.usuario, x.nombre || "-", x.tipo_acceso === "RDP" ? "RDP" : "Aplicaciones"],
+    director: !!x.director, // vista del aprobador de directores: cuadro directores o colaboradores
     note: x.activo_ad === 0 ? "Deshabilitada en AD" : "",
     // Interna pendiente: sin decisión elegida, el gerente la marca una por una.
     decision: status === PENDING ? "" : INTERNAL_LABEL[x.estado] || "", observation: x.observacion || "", status,

@@ -32,8 +32,8 @@ const API = {
 };
 const KEYS = Object.keys(SCOPES);
 const EMPTY = { rows: [], loading: true, error: "" };
-// Aprobador de directores (David Álava): sus "internas" son las VPN de los directores.
-const DIRECTOR_TITLES = { ...SCOPES, internas: { title: "VPN de directores", lower: "VPN de directores" } };
+// Aprobador de directores (David Álava): sus "internas" son las VPN de directores y de colaboradores.
+const DIRECTOR_TITLES = { ...SCOPES, internas: { title: "VPN de directores y colaboradores", lower: "VPN de directores y colaboradores" } };
 
 /** Panel del gerente: SUS VPN externas e internas en una sola página. */
 export default function ManagerDashboard() {
@@ -76,6 +76,8 @@ export default function ManagerDashboard() {
 
   // Un cuadro sin VPN asignadas no se muestra (mientras carga o si falló, sí).
   const shown = (key) => boxes[key].loading || !!boxes[key].error || boxes[key].rows.length > 0;
+  // Vista del aprobador: las internas se reparten en dos cuadros (se guardan igual, como internas).
+  const internalPart = (isDirector) => ({ ...boxes.internas, rows: boxes.internas.rows.filter((r) => r.director === isDirector) });
 
   const change = (key) => (id, field, value) => setRows(key, (rows) => rows.map((r) => (
     r.id !== id ? r : { ...r, [field]: value, ...(field === "decision" && value !== "Otro" ? { observation: "" } : {}) })));
@@ -139,7 +141,7 @@ export default function ManagerDashboard() {
           <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-100"><Briefcase size={16}/>Validación de VPN de directores</p>
           <h1 className="mt-2 text-3xl font-bold">Saludos cordiales{director.nombre ? `, señor ${director.nombre}` : ""}.</h1>
           <p className="mt-3 max-w-3xl text-base leading-7 text-red-50">
-            Usted tiene a cargo las VPN de los siguientes directores. Por favor, confirme para cada una si se debe
+            Usted tiene a cargo las VPN de los siguientes directores y colaboradores. Por favor, confirme para cada una si se debe
             <b> Mantener</b>, <b>Eliminar</b> u <b>Otro</b>.</p>
         </div>
         <div className="mt-6 rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-rose-50 p-5 text-sm text-red-900">
@@ -169,9 +171,14 @@ export default function ManagerDashboard() {
       {semaphoreCard}
       {campaign && !campaign.active && <p className="mt-6 rounded-2xl bg-amber-50 p-5 text-sm text-amber-800">No hay una campaña activa.</p>}
 
-      {director ? <VpnBox tone="directores" title="VPN de directores" headers={["Cuenta", "Director", "Acceso"]} {...boxes.internas}
-        expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de directores asignadas en esta campaña."
-        onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/> : <>
+      {director ? <>
+        <VpnBox tone="directores" title="VPN de directores" headers={["Cuenta", "Director", "Acceso"]} {...internalPart(true)}
+          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de directores asignadas en esta campaña."
+          onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
+        <VpnBox tone="colaboradores" title="VPN de colaboradores" headers={["Cuenta", "Colaborador", "Acceso"]} {...internalPart(false)}
+          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de colaboradores asignadas en esta campaña."
+          onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
+      </> : <>
       {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
         expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes VPN externas asignadas a tu usuario en esta campaña."
         onChange={change("externas")} onSave={saveOne("externas")} onTouch={touch("externas")}/>}
@@ -186,8 +193,8 @@ export default function ManagerDashboard() {
 
       <div className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
         <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">
-          {feedback?.text || (allSaved ? (director ? "Ya guardó todas las VPN de directores de esta campaña." : "Ya guardaste todas tus VPN de esta campaña.")
-            : director ? "Guardar todas guarda las decisiones elegidas en las VPN de directores." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
+          {feedback?.text || (allSaved ? (director ? "Ya guardó todas las VPN de directores y colaboradores de esta campaña." : "Ya guardaste todas tus VPN de esta campaña.")
+            : director ? "Guardar todas guarda las decisiones elegidas en las VPN de directores y de colaboradores." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
         <button type="button" disabled={expired || demo || busy || !campaign?.active || allSaved} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
           className="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
           <Save size={16}/>{demo ? "Solo demostración" : expired ? "Campaña cerrada" : allSaved ? "Todas guardadas" : "Guardar todas"}</button>
@@ -195,7 +202,7 @@ export default function ManagerDashboard() {
 
       {plan && <SaveAllModal plan={plan} titles={titles} touchedAny={touched.externas || touched.internas} busy={busy}
         onClose={() => setPlan(null)} onConfirm={saveAll}/>}
-      {confirmOne && <SaveOneModal row={confirmOne.row} scopeTitle={confirmOne.key === "externas" ? "VPN externa" : director ? "VPN de director" : "Cuenta interna"} busy={busy}
+      {confirmOne && <SaveOneModal row={confirmOne.row} scopeTitle={confirmOne.key === "externas" ? "VPN externa" : director ? (confirmOne.row.director ? "VPN de director" : "VPN de colaborador") : "Cuenta interna"} busy={busy}
         onClose={() => setConfirmOne(null)} onConfirm={confirmSaveOne}/>}
     </div>
   );
