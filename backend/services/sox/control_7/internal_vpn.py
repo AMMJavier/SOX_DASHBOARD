@@ -241,18 +241,23 @@ def _first_name(display):
 
 
 def list_for_manager(db, username):
-    from services.sox.control_7.ldap_vpn import director_approver
+    from services.sox.control_7.ldap_vpn import director_approver, director_demo_users
 
-    approver = (username or "").strip().lower() == director_approver()
+    username = (username or "").strip().lower()
+    approver = username == director_approver()
+    # Demostración: ve las VPN del aprobador de directores, sin poder guardar (ver decide()).
+    demo = not approver and username in director_demo_users()
+    if demo:
+        username, approver = director_approver(), True
     campaign = active_campaign(db)
     if not campaign:
-        return {"campana": None, "items": [], "aprobador_directores": approver, "nombre_saludo": ""}
+        return {"campana": None, "items": [], "aprobador_directores": approver, "demo": demo, "nombre_saludo": ""}
     items = _rows(db.execute(text(_SELECT + """
         WHERE ID_CAMPANA = :p_camp AND LOWER(GERENTE_USUARIO) = LOWER(:p_user)
         ORDER BY TIPO_ACCESO, NOMBRE, USUARIO
     """), {"p_camp": campaign["id"], "p_user": username}))
     # El aprobador de directores ve una página propia ("VPN de directores") con un saludo.
-    return {"campana": campaign, "items": items, "aprobador_directores": approver,
+    return {"campana": campaign, "items": items, "aprobador_directores": approver, "demo": demo,
             "nombre_saludo": _first_name(items[0]["gerente"]) if approver and items else ""}
 
 
@@ -446,6 +451,12 @@ def decide(db, *, item_id, decision, observation, user, accion="MODIFICACION_VAL
     """), {"p_id": item_id}).mappings().first()
     if not row or row["id_campana"] != campaign["id"]:
         raise HTTPException(404, "La cuenta no pertenece a la campaña activa")
+    from services.sox.control_7.ldap_vpn import director_demo_users
+
+    # Usuario de demostración (LDAP7_DEMO_DIRECTORES): ve la página de directores pero no guarda.
+    if ((user.username or "").lower() in director_demo_users()
+            and (row["gerente_usuario"] or "").lower() != user.username.lower()):
+        raise HTTPException(403, "Vista de demostración: no se pueden guardar decisiones")
     is_admin = user.rol in ("administrador", "desarrollador")
     if not is_admin and (row["gerente_usuario"] or "").lower() != user.username.lower():
         raise HTTPException(403, "Solo el gerente a cargo puede confirmar esta cuenta")

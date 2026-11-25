@@ -52,7 +52,7 @@ export default function ManagerDashboard() {
   async function load(key) {
     try {
       const { rows, meta } = await API[key].load();
-      if (meta?.aprobador_directores) setDirector({ nombre: meta.nombre_saludo || "" });
+      if (meta?.aprobador_directores) setDirector({ nombre: meta.nombre_saludo || "", demo: !!meta.demo });
       setBox(key, { rows, loading: false, error: "" });
     }
     catch (e) { setBox(key, { loading: false, error: errorText(e, `No se pudieron cargar tus ${SCOPES[key].lower}.`) }); }
@@ -64,6 +64,7 @@ export default function ManagerDashboard() {
   }, []);
 
   const expired = !!campaign?.expired;
+  const demo = !!director?.demo; // vista de demostración: solo lectura
   const semaphore = SEMAPHORE[campaign?.semaforo];
   // El aprobador de directores solo trabaja el cuadro de directores (las internas a su cargo).
   const keys = director ? ["internas"] : KEYS;
@@ -132,6 +133,8 @@ export default function ManagerDashboard() {
   return (
     <div>
       {director ? <>
+        {demo && <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Vista de demostración: así ve la página el aprobador de directores. Solo lectura, no se guarda ninguna decisión.</p>}
         <div className="rounded-2xl bg-gradient-to-r from-red-800 via-red-600 to-rose-400 p-7 text-white shadow-md">
           <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-100"><Briefcase size={16}/>Validación de VPN de directores</p>
           <h1 className="mt-2 text-3xl font-bold">Saludos cordiales{director.nombre ? `, señor ${director.nombre}` : ""}.</h1>
@@ -167,7 +170,7 @@ export default function ManagerDashboard() {
       {campaign && !campaign.active && <p className="mt-6 rounded-2xl bg-amber-50 p-5 text-sm text-amber-800">No hay una campaña activa.</p>}
 
       {director ? <VpnBox tone="directores" title="VPN de directores" headers={["Cuenta", "Director", "Acceso"]} {...boxes.internas}
-        expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de directores asignadas en esta campaña."
+        expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de directores asignadas en esta campaña."
         onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/> : <>
       {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
         expired={expired} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tienes VPN externas asignadas a tu usuario en esta campaña."
@@ -185,9 +188,9 @@ export default function ManagerDashboard() {
         <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">
           {feedback?.text || (allSaved ? (director ? "Ya guardó todas las VPN de directores de esta campaña." : "Ya guardaste todas tus VPN de esta campaña.")
             : director ? "Guardar todas guarda las decisiones elegidas en las VPN de directores." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
-        <button type="button" disabled={expired || busy || !campaign?.active || allSaved} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
+        <button type="button" disabled={expired || demo || busy || !campaign?.active || allSaved} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
           className="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
-          <Save size={16}/>{expired ? "Campaña cerrada" : allSaved ? "Todas guardadas" : "Guardar todas"}</button>
+          <Save size={16}/>{demo ? "Solo demostración" : expired ? "Campaña cerrada" : allSaved ? "Todas guardadas" : "Guardar todas"}</button>
       </div>
 
       {plan && <SaveAllModal plan={plan} titles={titles} touchedAny={touched.externas || touched.internas} busy={busy}

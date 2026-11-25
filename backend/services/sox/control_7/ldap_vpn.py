@@ -210,6 +210,12 @@ def director_approver():
     return (_env("APROBADOR_DIRECTORES") or DEFAULT_DIRECTOR_APPROVER).strip().lower()
 
 
+def director_demo_users():
+    """Usuarios SOX que ven la página del aprobador de directores en SOLO LECTURA (demostración
+    para los administradores). .env: LDAP7_DEMO_DIRECTORES=amiranda (varios separados por coma)."""
+    return {u.strip().lower() for u in (_env("DEMO_DIRECTORES") or "").split(",") if u.strip()}
+
+
 def is_director(title):
     return _plain_title(title).startswith(DIRECTOR_TITLE_PREFIX)
 
