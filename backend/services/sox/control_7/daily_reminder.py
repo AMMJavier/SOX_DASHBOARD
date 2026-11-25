@@ -8,6 +8,9 @@
   respondida: la tiene que corregir el administrador, no se le recuerda al gerente.
 - Sin duplicados: la clave C7D-<campaña>-<gerente>-<AAAAMMDD> es única en SOX_MAIL_OUTBOX,
   aunque se reinicie la API o haya varios procesos.
+- Modo prueba propio (recordatorio_diario.modo_prueba): el recordatorio de cada gerente va SOLO a
+  los destinatarios de prueba con asunto [PRUEBA], desde el día siguiente al inicio de la campaña
+  y sin exigir el aviso de apertura (para probarlo sin haber avisado a ningún gerente).
 Configuración: correos.json > controles.7.recordatorio_diario (apagado por defecto).
 """
 from __future__ import annotations  # Python 3.9 en el servidor
@@ -53,18 +56,35 @@ def _skip(reason):
     return 0
 
 
+def own_test():
+    """Modo prueba propio del recordatorio (recordatorio_diario.modo_prueba)."""
+    return mail_config.c7_daily_reminder()["modo_prueba"]
+
+
+def is_test():
+    """Prueba si lo pide el recordatorio o el aviso de apertura (aviso_gerentes.modo_prueba)."""
+    return own_test() or ext.modo_prueba()
+
+
+def test_emails():
+    return mail_config.c7_daily_reminder()["destinatarios_prueba"] if own_test() else ext.correos_prueba()
+
+
 # ---------------------------------------------------------------- pendientes
 
-def pending_by_manager(db, campaign):
+def pending_by_manager(db, campaign, keep_without_mail=False):
     """Gerentes con VPN por validar, unidos por correo: {correo: {...}}.
 
     Devuelve (gerentes, sin_correo): los que no tienen un correo único no se pueden avisar.
+    keep_without_mail=True (modo prueba propio): se incluyen igual, con correo vacío, porque el
+    recordatorio va a los destinatarios de prueba.
     """
     result, without_mail = {}, []
 
     def add(email, name, key, field, count):
-        item = result.setdefault(email.casefold(), {
-            "correo": email, "gerente": name, "externas": 0, "internas": 0, "claves": set()})
+        group = email.casefold() if email else f"sin-correo:{key}"
+        item = result.setdefault(group, {
+            "correo": email or "", "gerente": name, "externas": 0, "internas": 0, "claves": set()})
         item[field] += count
         item["claves"].add(key)
 
@@ -79,6 +99,8 @@ def pending_by_manager(db, campaign):
             add(emails[0], item["gerente"], key, "externas", count)
         else:
             without_mail.append(item["gerente"])
+            if keep_without_mail:
+                add("", item["gerente"], key, "externas", count)
     managers, _, _ = internal._managers(db, campaign["id"])
     for key, item in managers.items():
         count = item["vpn"] - item["confirmadas"] - item["reportadas"]
@@ -88,6 +110,8 @@ def pending_by_manager(db, campaign):
             add(item["correo"], item["gerente"], key, "internas", count)
         else:
             without_mail.append(item["gerente"])
+            if keep_without_mail:
+                add("", item["gerente"], key, "internas", count)
     return result, without_mail
 
 
@@ -114,9 +138,12 @@ def compose(campaign, item, today):
     }
     subject = mail_config.render(config["asunto"] or DEFAULT_SUBJECT, **values)
     body = mail_config.render(config["cuerpo"] or DEFAULT_BODY, **values)
-    if ext.modo_prueba():
+    if is_test():
         subject = f"[PRUEBA] {subject}"
-        body = mail_config.render(mail_config.c7_notice()["nota_prueba"] or ext.DEFAULT_TEST_NOTE, **values) + body
+        note = mail_config.render(mail_config.c7_notice()["nota_prueba"] or ext.DEFAULT_TEST_NOTE, **values)
+        if own_test():
+            note += f"Correo del gerente: {item['correo'] or 'sin correo registrado'}\n\n"
+        body = note + body
     return " ".join(subject.split())[:200], body
 
 
@@ -129,7 +156,7 @@ def _allowed(addresses):
 
 def _send(db, campaign, item, today, user):
     """True = enviado, False = falló, None = ya estaba registrado hoy o no corresponde."""
-    emails = ext.correos_prueba() if ext.modo_prueba() else [item["correo"]]
+    emails = test_emails() if is_test() else [item["correo"]]
     if not emails or not _allowed(emails):
         mail.console(f"RECORDATORIO C7 OMITIDO | gerente={item['gerente']!r}: dominio no autorizado")
         return None
@@ -138,8 +165,8 @@ def _send(db, campaign, item, today, user):
     if not _allowed(copies):
         mail.console("RECORDATORIO C7: se omiten las copias de recordatorio_diario (dominio no autorizado)")
         copies = []
-    key = "dia:" + item["correo"].casefold()
-    prefix = "C7DP" if ext.modo_prueba() else "C7D"
+    key = "dia:" + (item["correo"] or item["gerente"]).casefold()
+    prefix = "C7DP" if is_test() else "C7D"
     idem = f"{prefix}-{campaign['id']}-{ext._key_hash(key)}-{today:%Y%m%d}"
     if db.execute(text("SELECT COUNT(*) FROM AUTOM.SOX_MAIL_OUTBOX WHERE IDEMPOTENCY_KEY = :p_idem"),
                   {"p_idem": idem}).scalar():
@@ -219,13 +246,23 @@ def run_once(now=None, db=None):
 
         from services.sox.common.reminder_scheduler import _system_user
         user = _system_user(db)
-        pending, without_mail = pending_by_manager(db, campaign)
-        notices = ext._notifications(db, campaign["id"])  # avisos de apertura (externas e internas)
+        test_only = own_test()
+        if test_only:
+            started = campaign.get("fecha_inicio")
+            started = started.date() if isinstance(started, datetime) else started
+            if started and today <= started:
+                return _skip(f"modo prueba: el primer recordatorio es al día siguiente del inicio de la campaña {campaign['id']}")
+        pending, without_mail = pending_by_manager(db, campaign, keep_without_mail=test_only)
+        notices = {} if test_only else ext._notifications(db, campaign["id"])  # avisos de apertura
+        limit = config["max_prueba"] if test_only else 0
         start, now_utc = time.monotonic(), mail._now()
-        sent = failed = not_opened = already = 0
+        sent = failed = not_opened = already = capped = 0
         for item in sorted(pending.values(), key=lambda x: x["gerente"]):
-            if not any(_opened(notices.get(key, []), now_utc) for key in item["claves"]):
+            if not test_only and not any(_opened(notices.get(key, []), now_utc) for key in item["claves"]):
                 not_opened += 1
+                continue
+            if limit and sent + failed >= limit:
+                capped += 1
                 continue
             try:
                 ok = _send(db, campaign, item, today, user)
@@ -238,8 +275,9 @@ def run_once(now=None, db=None):
             already += ok is None
         _done = (campaign["id"], today)
         mail.console(
-            f"RECORDATORIO C7 FIN | campaña={campaign['id']} modo={'PRUEBA' if ext.modo_prueba() else 'REAL'} "
+            f"RECORDATORIO C7 FIN | campaña={campaign['id']} modo={'PRUEBA' if is_test() else 'REAL'} "
             f"con_pendientes={len(pending)} enviados={sent} fallidos={failed} omitidos={already} "
+            f"sobre_limite_prueba={capped} "
             f"sin_aviso_de_apertura={not_opened} sin_correo={len(without_mail)} | {mail.elapsed(start)}")
         return sent
     finally:

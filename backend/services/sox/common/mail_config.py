@@ -225,8 +225,18 @@ def c7_daily_reminder() -> dict:
     data = control(7).get("recordatorio_diario") or {}
     general = automatic()
     hour, minute = _hour(data.get("hora_desde", general["hora_desde"]), "recordatorio_diario.hora_desde")
+    test = data.get("modo_prueba") or {}
+    try:
+        max_test = max(int(test.get("max_correos_por_dia", 0) or 0), 0)
+    except (TypeError, ValueError):
+        max_test = 0
     return {
         "activo": data.get("activo") is True and general["activo"],
+        # Modo prueba PROPIO del recordatorio: con activo=true nunca va a los gerentes, aunque
+        # aviso_gerentes esté en modo real. max_correos_por_dia: 0 = sin límite.
+        "modo_prueba": bool(test.get("activo")) and bool(_list(test.get("destinatarios"))),
+        "destinatarios_prueba": _dedupe(_list(test.get("destinatarios"))),
+        "max_prueba": max_test,
         "hora_desde": f"{hour:02d}:{minute:02d}",
         "minuto_del_dia": hour * 60 + minute,
         "copias": _dedupe(_list(data.get("copias"))),

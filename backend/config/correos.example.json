@@ -238,11 +238,19 @@
         ]
       },
       "recordatorio_diario": {
-        "_info": "Cada día, desde el siguiente al aviso de apertura y hasta la fecha límite, recuerda a cada gerente cuántas VPN (externas + internas) le faltan por validar. No se envía a quien ya validó todas ni a quien aún no recibió el aviso de apertura. Requiere automatico.activo=true. Usa el modo_prueba de aviso_gerentes. copias: CC solo de este recordatorio.",
+        "_info": "Cada día, desde el siguiente al aviso de apertura y hasta la fecha límite, recuerda a cada gerente cuántas VPN (externas + internas) le faltan por validar. No se envía a quien ya validó todas ni (en modo real) a quien aún no recibió el aviso de apertura. Requiere automatico.activo=true. copias: CC solo de este recordatorio.",
         "_variables": "{gerente} {campana} {periodo} {pendientes} {pendientes_externas} {pendientes_internas} {fecha_limite} {dias_restantes} {linea_portal} {portal}",
         "activo": false,
         "hora_desde": "09:00",
-        "copias": []
+        "copias": [],
+        "modo_prueba": {
+          "_info": "Con activo=true el recordatorio NUNCA va a los gerentes: el de cada gerente llega a estos destinatarios con asunto [PRUEBA], desde el día siguiente al inicio de la campaña, aunque no se haya enviado el aviso de apertura. max_correos_por_dia: tope de correos de prueba por día (0 = uno por cada gerente pendiente). Para enviarlo de verdad a los gerentes: activo=false aquí y en aviso_gerentes.modo_prueba.",
+          "activo": true,
+          "destinatarios": [
+            "usuario.prueba@dominio-permitido.com"
+          ],
+          "max_correos_por_dia": 5
+        }
       }
     }
   }
