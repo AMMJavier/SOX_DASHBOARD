@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Lock, Network, Save } from "lucide-react";
+import { Briefcase, Globe, Lock, Network, Save } from "lucide-react";
 import Pagination from "../../../../components/common/Pagination";
 import { CONFIRMED, DECISIONS, PENDING, REPORTED, summarize } from "./vpnRows";
 
@@ -14,6 +14,11 @@ const TONES = {
   internas: {
     Icon: Network, label: "Interna", section: "border-violet-200 border-l-violet-500", badge: "bg-violet-100 text-violet-700",
     title: "text-violet-900", head: "bg-violet-50 text-violet-900 [&_th]:border-violet-200", hover: "hover:bg-violet-50/60",
+  },
+  // Vista del aprobador de directores (David Álava): un solo cuadro "VPN de directores".
+  directores: {
+    Icon: Briefcase, label: "Directores", section: "border-emerald-200 border-l-emerald-600", badge: "bg-emerald-100 text-emerald-800",
+    title: "text-emerald-900", head: "bg-emerald-50 text-emerald-900 [&_th]:border-emerald-200", hover: "hover:bg-emerald-50/60",
   },
 };
 const TD = "border-b border-slate-100 p-4";

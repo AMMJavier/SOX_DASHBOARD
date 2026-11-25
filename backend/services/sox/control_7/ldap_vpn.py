@@ -149,14 +149,14 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
     """Busca usuarios directamente miembros del grupo mediante páginas AD.
 
     No equivale a grupos anidados ni a sesiones VPN conectadas.
-    with_manager=True agrega el DN del jefe ("manager" de AD) en "manager_dn".
+    with_manager=True agrega el DN del jefe ("manager" de AD) en "manager_dn" y el cargo ("title") en "cargo".
     """
     search_filter = (
         "(&(objectCategory=person)(objectClass=user)(memberOf="
         + escape_filter_chars(group_dn) + "))"
     )
     accounts = {}
-    attributes = ["sAMAccountName", "displayName", "userAccountControl"] + (["manager"] if with_manager else [])
+    attributes = ["sAMAccountName", "displayName", "userAccountControl"] + (["manager", "title"] if with_manager else [])
     rows = conn.extend.standard.paged_search(
         search_base=base,
         search_filter=search_filter,
@@ -186,6 +186,7 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
         accounts[username] = {"usuario": username, "nombre": display, "activo": enabled}
         if with_manager:
             accounts[username]["manager_dn"] = str(_first(attrs.get("manager")) or "").strip() or None
+            accounts[username]["cargo"] = str(_first(attrs.get("title")) or "").strip()[:200]
         if len(accounts) > max_users:
             raise LDAPAccessError("El grupo LDAP supera el máximo configurado")
     return accounts
@@ -195,6 +196,22 @@ def _direct_users(conn, base, group_dn, page_size, max_users, with_manager=False
 # de AD (atributo "manager"), no el jefe directo (que puede ser jefe o coordinador).
 MANAGER_TITLE_PREFIX = "gerente"
 MAX_MANAGER_LEVELS = 10
+
+# Excepción: las VPN de las cuentas con cargo "Director..." no las valida un gerente (sería un
+# subordinado) sino el aprobador de directores (David Álava, usuario de red "dalava"), también la
+# suya propia. Se cambia con LDAP7_APROBADOR_DIRECTORES en el .env. Aplica a directores nuevos y
+# existentes en cada carga desde LDAP.
+DIRECTOR_TITLE_PREFIX = "director"
+DEFAULT_DIRECTOR_APPROVER = "dalava"
+
+
+def director_approver():
+    """Usuario de red (sAMAccountName) que valida las VPN de los directores."""
+    return (_env("APROBADOR_DIRECTORES") or DEFAULT_DIRECTOR_APPROVER).strip().lower()
+
+
+def is_director(title):
+    return _plain_title(title).startswith(DIRECTOR_TITLE_PREFIX)
 
 
 def _plain_title(value):
@@ -258,6 +275,8 @@ def read_internal_access_with_managers():
     Devuelve una fila por (cuenta, grupo): usuario, nombre, activo, tipo_acceso y
     gerente {usuario, nombre, correo, cargo}: el primer jefe de la cadena de AD cuyo cargo
     empieza con "Gerente"; None si la cuenta no tiene jefe o no hay gerente en la cadena.
+    Si el cargo de la cuenta empieza con "Director", el gerente es el aprobador de directores
+    (director_approver) y la fila lleva director=True.
     """
     page_size = _integer("PAGE_SIZE", 200, 20, 1000)
     max_users = _integer("MAX_USERS_PER_GROUP", 5000, 100, 20000)
@@ -265,6 +284,7 @@ def read_internal_access_with_managers():
     try:
         conn, base = _open_connection()
         rows, people, found = [], {}, {}
+        approver = _approver(conn, base)
         for access_type, group_name in LDAP_GROUPS.items():
             dn = _group_dn(conn, base, group_name)
             group_users = _direct_users(conn, base, dn, page_size, max_users, with_manager=True)
@@ -272,9 +292,15 @@ def read_internal_access_with_managers():
                 raise LDAPAccessError("El grupo LDAP " + access_type + " no devolvió cuentas")
             for info in group_users.values():
                 manager_dn = info.pop("manager_dn", None)
-                manager = _find_manager(conn, manager_dn, people, found) if manager_dn else None
-                rows.append({**info, "tipo_acceso": access_type, "gerente": manager})
+                director = bool(approver) and is_director(info.get("cargo"))
+                if director:
+                    manager = approver
+                else:
+                    manager = _find_manager(conn, manager_dn, people, found) if manager_dn else None
+                rows.append({**info, "tipo_acceso": access_type, "gerente": manager, "director": director})
         managers = {m["usuario"] for m in found.values() if m}
+        if any(r["director"] for r in rows):
+            managers.add(approver["usuario"])
         return {"filas": rows, "gerentes": len(managers),
                 "consulta_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     except LDAPAccessError:
@@ -288,6 +314,25 @@ def read_internal_access_with_managers():
                 conn.unbind()
             except Exception:
                 pass
+
+
+def _approver(conn, base):
+    """Datos de AD del aprobador de directores; None (y aviso en el log) si no está en AD."""
+    username = director_approver()
+    conn.search(search_base=base, search_scope=SUBTREE,
+                search_filter="(&(objectCategory=person)(objectClass=user)(sAMAccountName="
+                              + escape_filter_chars(username) + "))",
+                attributes=["sAMAccountName", "displayName", "mail", "title", "department"], size_limit=2)
+    if len(conn.entries) != 1:
+        logger.warning("Control 7 internas: el aprobador de directores %s no está en AD; "
+                       "las VPN de directores siguen la cadena de jefes", username)
+        return None
+    attrs = conn.entries[0].entry_attributes_as_dict
+    return {"usuario": str(_first(attrs.get("sAMAccountName")) or username).strip().lower()[:100],
+            "nombre": (str(_first(attrs.get("displayName")) or "").strip() or username)[:200],
+            "correo": str(_first(attrs.get("mail")) or "").strip() or None,
+            "cargo": str(_first(attrs.get("title")) or "").strip(),
+            "departamento": str(_first(attrs.get("department")) or "").strip()}
 
 
 def read_internal_access():

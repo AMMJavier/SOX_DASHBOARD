@@ -90,7 +90,8 @@ def load_from_ldap(db, campaign_id=None, replace=False):
     si LDAP falla no se borra nada. No se permite si algún gerente ya confirmó cuentas.
 
     Las cuentas sin gerente en AD conservan el gerente que les asignó el administrador
-    (GERENTE_MANUAL = 1), también de una campaña anterior. Si AD ya tiene gerente, manda AD."""
+    (GERENTE_MANUAL = 1), también de una campaña anterior. Si AD ya tiene gerente, manda AD.
+    Las cuentas con cargo "Director..." las valida el aprobador de directores (ldap_vpn.director_approver)."""
     from services.sox.control_7.ldap_vpn import LDAPAccessError, read_internal_access_with_managers
 
     campaign = active_campaign(db)
@@ -132,11 +133,13 @@ def load_from_ldap(db, campaign_id=None, replace=False):
 
     managers = {}
     without_manager = 0
+    directors = 0
     kept_manual = 0
     reassigned = 0
     for row in report["filas"]:
         manager = row.get("gerente")
         is_manual = 0
+        directors += bool(row.get("director"))
         if manager:
             managers[manager["usuario"]] = manager
         elif (row["usuario"], row["tipo_acceso"]) in manual:
@@ -211,7 +214,7 @@ def load_from_ldap(db, campaign_id=None, replace=False):
     db.commit()
     summary = {"id_campana": campaign_id, "reemplazo": bool(replace), "borrados": deleted,
                "membresias": len(report["filas"]), "gerentes": len(managers),
-               "sin_gerente": without_manager, "gerente_manual": kept_manual, "reasignadas_reportadas": reassigned,
+               "sin_gerente": without_manager, "directores": directors, "gerente_manual": kept_manual, "reasignadas_reportadas": reassigned,
                "consulta_utc": report["consulta_utc"]}
     log(f"CARGA FIN | {summary}")
     return summary
@@ -229,15 +232,28 @@ _SELECT = """
 """
 
 
+def _first_name(display):
+    """ "TIC David Álava" -> "David" (quita el prefijo de área en mayúsculas)."""
+    words = str(display or "").split()
+    if len(words) > 1 and words[0].isupper() and len(words[0]) <= 4:
+        words = words[1:]
+    return words[0] if words else ""
+
+
 def list_for_manager(db, username):
+    from services.sox.control_7.ldap_vpn import director_approver
+
+    approver = (username or "").strip().lower() == director_approver()
     campaign = active_campaign(db)
     if not campaign:
-        return {"campana": None, "items": []}
+        return {"campana": None, "items": [], "aprobador_directores": approver, "nombre_saludo": ""}
     items = _rows(db.execute(text(_SELECT + """
         WHERE ID_CAMPANA = :p_camp AND LOWER(GERENTE_USUARIO) = LOWER(:p_user)
         ORDER BY TIPO_ACCESO, NOMBRE, USUARIO
     """), {"p_camp": campaign["id"], "p_user": username}))
-    return {"campana": campaign, "items": items}
+    # El aprobador de directores ve una página propia ("VPN de directores") con un saludo.
+    return {"campana": campaign, "items": items, "aprobador_directores": approver,
+            "nombre_saludo": _first_name(items[0]["gerente"]) if approver and items else ""}
 
 
 def list_admin(db, *, campaign_id=None, search="", gerente="", estado="", tipo="", offset=0, limit=50):

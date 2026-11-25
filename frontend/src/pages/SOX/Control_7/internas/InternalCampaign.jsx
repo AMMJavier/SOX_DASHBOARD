@@ -70,7 +70,7 @@ export default function InternalCampaign() {
     setBusy(true); setMessage("");
     try {
       const r = await loadInternalFromLdap(replace);
-      setMessage(`${r.reemplazo ? `Carga reemplazada: ${r.borrados} registro(s) anteriores borrados. ` : ""}LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.gerente_manual ? `, ${r.gerente_manual} con gerente asignado a mano (se conserva)` : ""}${r.reasignadas_reportadas ? `, ${r.reasignadas_reportadas} reportada(s) (Otro / No pertenece) que pasaron a un gerente nuevo` : ""}.`);
+      setMessage(`${r.reemplazo ? `Carga reemplazada: ${r.borrados} registro(s) anteriores borrados. ` : ""}LDAP leído: ${r.membresias} acceso(s), ${r.gerentes} gerente(s), ${r.sin_gerente} sin gerente en AD${r.directores ? `, ${r.directores} de directores (las valida el aprobador de directores)` : ""}${r.gerente_manual ? `, ${r.gerente_manual} con gerente asignado a mano (se conserva)` : ""}${r.reasignadas_reportadas ? `, ${r.reasignadas_reportadas} reportada(s) (Otro / No pertenece) que pasaron a un gerente nuevo` : ""}.`);
       load();
     } catch (e) { setMessage(errorText(e, "No se pudo leer LDAP.")); }
     finally { setBusy(false); }

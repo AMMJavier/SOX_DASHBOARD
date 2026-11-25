@@ -2,8 +2,8 @@ import { AlertTriangle, Save, X } from "lucide-react";
 import { SCOPES } from "./vpnRows";
 
 /** Aviso antes del guardado masivo: qué cuadro se guarda y cuál falta validar. */
-export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfirm }) {
-  const saved = plan.scopes.map((s) => SCOPES[s.key].lower).join(" y las ");
+export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfirm, titles = SCOPES }) {
+  const saved = plan.scopes.map((s) => titles[s.key].lower).join(" y las ");
   const untouched = plan.missing.filter((m) => !plan.scopes.some((s) => s.key === m.key));
   const partial = plan.missing.filter((m) => plan.scopes.some((s) => s.key === m.key));
   const reported = plan.scopes.reduce((n, s) => n + s.reported, 0);
@@ -28,14 +28,14 @@ export default function SaveAllModal({ plan, touchedAny, busy, onClose, onConfir
           {canSave && <>
             <p className="text-base">{untouched.length > 0 || plan.scopes.length === 1 ? "Solo se guardarán" : "Se guardarán"} las decisiones de las <b>{saved}</b>.</p>
             <ul className="list-disc space-y-1 pl-5">
-              {plan.scopes.map((s) => <li key={s.key}>{SCOPES[s.key].title}: <b>{s.toSave.length}</b> por guardar</li>)}
+              {plan.scopes.map((s) => <li key={s.key}>{titles[s.key].title}: <b>{s.toSave.length}</b> por guardar</li>)}
             </ul>
           </>}
 
           {plan.scopes.length > 0 && untouched.map((m) => <p key={m.key} className="rounded-lg bg-amber-50 p-3 font-semibold text-amber-800">
-            Falta validar las {SCOPES[m.key].lower} ({m.count} pendiente{m.count === 1 ? "" : "s"}).</p>)}
+            Falta validar las {titles[m.key].lower} ({m.count} pendiente{m.count === 1 ? "" : "s"}).</p>)}
           {canSave && partial.map((m) => <p key={m.key} className="rounded-lg bg-amber-50 p-3 text-amber-800">
-            {SCOPES[m.key].title}: {m.count} sin decisión elegida; quedarán pendientes.</p>)}
+            {titles[m.key].title}: {m.count} sin decisión elegida; quedarán pendientes.</p>)}
 
           {canSave && reported > 0 && <p className="rounded-lg bg-slate-50 p-3">
             {reported} con <b>Otro</b> quedarán pendientes hasta que el administrador las revise.</p>}
