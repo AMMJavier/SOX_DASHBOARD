@@ -17,12 +17,12 @@ const TONES = {
   },
   // Vista del aprobador de directores (David Álava): un solo cuadro "VPN de directores".
   directores: {
-    Icon: Briefcase, label: "Directores", section: "border-red-200 border-l-red-600", badge: "bg-red-100 text-red-800",
+    Icon: Briefcase, label: null, section: "border-red-200 border-l-red-600", badge: "bg-red-100 text-red-800",
     title: "text-red-900", head: "bg-red-50 text-red-900 [&_th]:border-red-200", hover: "hover:bg-red-50/60",
   },
   // Mismo aprobador: VPN de colaboradores (no directores) que se le asignaron a mano.
   colaboradores: {
-    Icon: Users, label: "Colaboradores", section: "border-rose-200 border-l-rose-400", badge: "bg-rose-100 text-rose-800",
+    Icon: Users, label: null, section: "border-rose-200 border-l-rose-400", badge: "bg-rose-100 text-rose-800",
     title: "text-rose-900", head: "bg-rose-50 text-rose-900 [&_th]:border-rose-200", hover: "hover:bg-rose-50/60",
   },
 };
@@ -55,7 +55,7 @@ export default function VpnBox({ tone, title, headers, rows, loading, error, exp
         <h3 className={`flex items-center gap-3 text-lg font-bold ${t.title}`}>
           <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${t.badge}`}><Icon size={18}/></span>
           {title}
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${t.badge}`}>{t.label}</span>
+          {t.label && <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${t.badge}`}>{t.label}</span>}
         </h3>
         {rows.length > 0 && <p className="text-sm text-slate-500">
           <b className="text-slate-800">{rows.length}</b> en total · <b className="text-emerald-700">{confirmed}</b> confirmadas ·{" "}

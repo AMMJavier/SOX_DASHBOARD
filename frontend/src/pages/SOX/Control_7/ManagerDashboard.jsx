@@ -33,7 +33,7 @@ const API = {
 const KEYS = Object.keys(SCOPES);
 const EMPTY = { rows: [], loading: true, error: "" };
 // Aprobador de directores (David Álava): sus "internas" son las VPN de directores y de colaboradores.
-const DIRECTOR_TITLES = { ...SCOPES, internas: { title: "VPN de directores y colaboradores", lower: "VPN de directores y colaboradores" } };
+const DIRECTOR_TITLES = { ...SCOPES, internas: { title: "VPN de Directores y VPNs asignadas", lower: "VPN de Directores y VPNs asignadas" } };
 
 /** Panel del gerente: SUS VPN externas e internas en una sola página. */
 export default function ManagerDashboard() {
@@ -136,16 +136,20 @@ export default function ManagerDashboard() {
     <div>
       {director ? <>
         {demo && <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          Vista de demostración: así ve la página el aprobador de directores. Solo lectura, no se guarda ninguna decisión.</p>}
+          Vista de demostración: así ve la página el aprobador de Directores. Solo lectura, no se guarda ninguna decisión.</p>}
         <div className="rounded-2xl bg-gradient-to-r from-red-800 via-red-600 to-rose-400 p-7 text-white shadow-md">
-          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-100"><Briefcase size={16}/>Validación de VPN de directores</p>
-          <h1 className="mt-2 text-3xl font-bold">Saludos cordiales{director.nombre ? `, señor ${director.nombre}` : ""}.</h1>
+          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-100"><Briefcase size={16}/>Validación de VPN de Directores</p>
+          <h1 className="mt-2 text-3xl font-bold">Saludos cordiales{director.nombre ? `, ${director.nombre}` : ""}.</h1>
           <p className="mt-3 max-w-3xl text-base leading-7 text-red-50">
-            Usted tiene a cargo las VPN de los siguientes directores y colaboradores. Por favor, confirme para cada una si se debe
+            Usted tiene a cargo las VPN de los Directores y las VPNs que se le asignaron. Por favor, confirme para cada una si se debe
             <b> Mantener</b>, <b>Eliminar</b> u <b>Otro</b>.</p>
         </div>
         <div className="mt-6 rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-rose-50 p-5 text-sm text-red-900">
           <ul className="list-disc space-y-2 pl-5">
+            <li><b>VPN de Directores:</b> accesos de las cuentas con cargo de Director. Por su nivel no las valida un gerente, por eso
+              están a su cargo (incluida la suya).</li>
+            <li><b>VPNs asignadas:</b> accesos de colaboradores que no son directores, pero que el administrador de la plataforma le
+              asignó para que usted los confirme.</li>
             <li>Elija la decisión de cada VPN y presione <b>Guardar</b> en la fila, o <b>Guardar todas</b> al final.</li>
             <li>Con <b>Otro</b> escriba el motivo en <b>Observación</b>; la VPN queda en revisión del administrador.</li>
             <li>Una vez guardada, la decisión <b>no se puede cambiar</b>.</li>
@@ -172,11 +176,11 @@ export default function ManagerDashboard() {
       {campaign && !campaign.active && <p className="mt-6 rounded-2xl bg-amber-50 p-5 text-sm text-amber-800">No hay una campaña activa.</p>}
 
       {director ? <>
-        <VpnBox tone="directores" title="VPN de directores" headers={["Cuenta", "Director", "Acceso"]} {...internalPart(true)}
-          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de directores asignadas en esta campaña."
+        <VpnBox tone="directores" title="VPN de Directores" headers={["Cuenta", "Director", "Acceso"]} {...internalPart(true)}
+          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de Directores en esta campaña."
           onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
-        <VpnBox tone="colaboradores" title="VPN de colaboradores" headers={["Cuenta", "Colaborador", "Acceso"]} {...internalPart(false)}
-          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No hay VPN de colaboradores asignadas en esta campaña."
+        <VpnBox tone="colaboradores" title="VPNs asignadas" headers={["Cuenta", "Colaborador", "Acceso"]} {...internalPart(false)}
+          expired={expired || demo} busy={busy} deadline={campaign?.fecha_limite} emptyText="No tiene VPNs asignadas en esta campaña."
           onChange={change("internas")} onSave={saveOne("internas")} onTouch={touch("internas")}/>
       </> : <>
       {shown("externas") && <VpnBox tone="externas" title="Cliente VPN Externos" headers={["VPN", "Nombre VPN", "Solicitante", "Gerente Asignado"]} {...boxes.externas}
@@ -193,8 +197,8 @@ export default function ManagerDashboard() {
 
       <div className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
         <p className={`text-sm ${feedback ? (feedback.error ? "font-semibold text-red-700" : "font-semibold text-emerald-700") : "text-slate-500"}`} role="status">
-          {feedback?.text || (allSaved ? (director ? "Ya guardó todas las VPN de directores y colaboradores de esta campaña." : "Ya guardaste todas tus VPN de esta campaña.")
-            : director ? "Guardar todas guarda las decisiones elegidas en las VPN de directores y de colaboradores." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
+          {feedback?.text || (allSaved ? (director ? "Ya guardó todas las VPN de Directores y VPNs asignadas de esta campaña." : "Ya guardaste todas tus VPN de esta campaña.")
+            : director ? "Guardar todas guarda las decisiones elegidas en las VPN de Directores y en las VPNs asignadas." : "Guardar todas guarda solo el cuadro en el que trabajaste (externas, internas o ambos).")}</p>
         <button type="button" disabled={expired || demo || busy || !campaign?.active || allSaved} onClick={() => { setFeedback(null); setPlan(buildPlan(rowsByScope, touched)); }}
           className="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
           <Save size={16}/>{demo ? "Solo demostración" : expired ? "Campaña cerrada" : allSaved ? "Todas guardadas" : "Guardar todas"}</button>
@@ -202,7 +206,7 @@ export default function ManagerDashboard() {
 
       {plan && <SaveAllModal plan={plan} titles={titles} touchedAny={touched.externas || touched.internas} busy={busy}
         onClose={() => setPlan(null)} onConfirm={saveAll}/>}
-      {confirmOne && <SaveOneModal row={confirmOne.row} scopeTitle={confirmOne.key === "externas" ? "VPN externa" : director ? (confirmOne.row.director ? "VPN de director" : "VPN de colaborador") : "Cuenta interna"} busy={busy}
+      {confirmOne && <SaveOneModal row={confirmOne.row} scopeTitle={confirmOne.key === "externas" ? "VPN externa" : director ? (confirmOne.row.director ? "VPN de Director" : "VPN asignada") : "Cuenta interna"} busy={busy}
         onClose={() => setConfirmOne(null)} onConfirm={confirmSaveOne}/>}
     </div>
   );
