@@ -219,7 +219,7 @@ def run_batch(campaign_id, claves, user_id, username):
 
 
 def _send_one(db, campaign, item, emails, user_id, username, totals=None):
-    subject, body = compose(campaign, item["gerente"], item["vpn"], totals=totals)
+    subject, body = compose(campaign, item["gerente"], ext._pending(item), totals=totals)
     taken = {x.casefold() for x in emails}
     copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     correlation = uuid4().hex

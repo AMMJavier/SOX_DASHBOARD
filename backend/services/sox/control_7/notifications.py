@@ -148,6 +148,8 @@ def _vpn_table(vpns):
 def joint_groups(db, campaign_id):
     """Gerentes unidos por su correo REAL: correo de SOX_GERENTES_CONTACTO (externas) y correo
     LDAP (internas). Devuelve {clave_aviso: {"externas": n, "internas": n, "claves": {...}}}.
+    n = VPN SIN CONFIRMAR (Otro / No pertenece cuentan como pendientes): si el gerente ya validó
+    unas y luego se le agregan otras, el aviso solo cuenta las nuevas.
     Una clave sin correo único queda sola (solo con el total de su lado)."""
     from services.sox.control_7 import internal_notifications as internal
 
@@ -164,11 +166,16 @@ def joint_groups(db, campaign_id):
     managers, _, _ = _campaign_managers(db)
     for key, item in managers.items():
         found = list(contacts.get(key, {}).values())
-        add(found[0] if len(found) == 1 else None, key, "externas", item["vpn"])
+        add(found[0] if len(found) == 1 else None, key, "externas", _pending(item))
     managers, _, _ = internal._managers(db, campaign_id)
     for key, item in managers.items():
-        add(item["correo"] if item["correo"] and not item["ambiguo"] else None, key, "internas", item["vpn"])
+        add(item["correo"] if item["correo"] and not item["ambiguo"] else None, key, "internas", _pending(item))
     return by_key
+
+
+def _pending(item):
+    """VPN del gerente que aún no confirmó."""
+    return max(int(item.get("vpn") or 0) - int(item.get("confirmadas") or 0), 0)
 
 
 def covered(key, groups, attempts):
@@ -506,7 +513,7 @@ def _attempts_total(db, campaign_id, key):
 
 
 def _send_one(db, campaign, item, emails, attempt, user_id, username, vpns=None, totals=None):
-    subject, body = compose(campaign, item["gerente"], item["vpn"], vpns, totals)
+    subject, body = compose(campaign, item["gerente"], _pending(item), vpns, totals)
     taken = {x.casefold() for x in emails}
     copies = [x for x in mail.fixed_cc(7) if x.casefold() not in taken]
     email = ", ".join(emails)
