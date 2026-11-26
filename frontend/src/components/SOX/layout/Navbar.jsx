@@ -65,7 +65,11 @@ export default function Navbar({ module }) {
   return (
     <header className="flex min-h-20 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
       <div className="flex flex-wrap items-center gap-4">
-        {module === "SOX" && <div className="flex items-center gap-3"><span className="text-sm font-bold">Control activo:</span><ControlSelector /></div>}
+        {module === "SOX" && <div className="flex items-center gap-3"><span className="text-sm font-bold">Control activo:</span>
+          {/* Los gerentes solo tienen acceso al Control 7: texto fijo en vez del desplegable. */}
+          {user?.rol === "gerencial"
+            ? <div className="rounded-md border bg-white px-4 py-2 text-sm">Control 7 - Evidencias VPN Externas - Internas</div>
+            : <ControlSelector />}</div>}
         {isCampaignControl && <>
           <span className="text-sm font-bold">Campaña activa:</span>
           <div className="min-w-[220px] rounded-md border bg-white px-4 py-2">{loadingCampaign ? "Cargando campaña" : error ? "No disponible" : campaign?.name || "Sin campaña activa"}</div>
