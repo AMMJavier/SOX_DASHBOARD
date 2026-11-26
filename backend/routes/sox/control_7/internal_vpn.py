@@ -176,4 +176,7 @@ async def load_internal(reemplazar: bool = Query(False), db: Session = Depends(g
     reemplazar=true: borra la carga anterior y la carga desde cero (solo sin confirmaciones).
     """
     _admin(current)
+    # "Reemplazar carga" borra la carga de la campaña: solo para desarrolladores.
+    if reemplazar and current.rol != "desarrollador":
+        raise HTTPException(status_code=403, detail="Reemplazar carga solo está disponible para desarrolladores")
     return await run_in_threadpool(service.load_from_ldap, db, None, reemplazar)

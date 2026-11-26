@@ -10,6 +10,7 @@ import { formatDateTime } from "../../../../utils/dateTime";
 import {
   errorText, getInternalCampaignRows, getInternalNotifications, loadInternalFromLdap, sendInternalNotifications,
 } from "../../../../services/sox/control_7/internalVpnService";
+import { readStoredUser } from "../../../../services/authSession";
 import CampaignNotifications from "../../../../components/SOX/control_7/CampaignNotifications";
 import { ACCESS_LABEL, DECISION_LABEL, INTERNAL_CAMPAIGN_COLUMNS, hasDecision, internalStatus } from "./internalShared";
 
@@ -30,6 +31,8 @@ export default function InternalCampaign() {
   const [assigning, setAssigning] = useState(null); // cuentas del modal "Asignar gerente"
   const [noticeKey, setNoticeKey] = useState(0);  // refresca "Notificación a gerentes"
   const rowsPerPage = 80;
+  // "Reemplazar carga" borra la carga de la campaña: solo desarrolladores.
+  const isDeveloper = readStoredUser()?.rol === "desarrollador";
 
   const load = () => getInternalCampaignRows().then(setData).catch((e) => setMessage(errorText(e, "No se pudo cargar la campaña.")));
   useEffect(() => { load(); }, []);
@@ -100,9 +103,9 @@ export default function InternalCampaign() {
                 className="flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700">
                 <UserPlus size={16}/>Asignar gerente ({picked.length})</button>
             )}
-            <button onClick={() => reloadLdap(true)} disabled={busy || !data.campana} title="Borra la carga actual de la campaña y la vuelve a cargar con los gerentes"
+            {isDeveloper && <button onClick={() => reloadLdap(true)} disabled={busy || !data.campana} title="Borra la carga actual de la campaña y la vuelve a cargar con los gerentes"
               className="flex h-11 items-center gap-2 rounded-lg border border-red-300 bg-white px-5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
-              <RefreshCw size={16}/>Reemplazar carga</button>
+              <RefreshCw size={16}/>Reemplazar carga</button>}
             <button onClick={() => reloadLdap(false)} disabled={busy || !data.campana} className="flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60">
               <RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Leyendo LDAP..." : "Cargar desde LDAP"}</button>
             <button className="h-11 rounded-lg bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-700" onClick={async () => {
@@ -128,7 +131,7 @@ export default function InternalCampaign() {
             <option value="">Todos los estados</option>{["Pendiente", "Confirmado", "Vencido", "Sin Responsable"].map((s) => <option key={s}>{s}</option>)}
           </select>
           <select value={decision} onChange={resetPage(setDecision)} className={SELECT}>
-            <option value="">Todas las decisiones</option>{Object.entries(DECISION_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            <option value="">Todas las decisiones</option>{Object.entries(DECISION_LABEL).filter(([v]) => v !== "no pertenece").map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <select value={access} onChange={resetPage(setAccess)} className={SELECT}>
             <option value="">Todos los accesos</option><option value="RDP">RDP</option><option value="APLICACIONES">Aplicaciones</option>

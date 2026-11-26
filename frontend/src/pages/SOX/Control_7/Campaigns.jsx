@@ -188,7 +188,7 @@ return (
         </select>
         <select value={selectedDecision} onChange={resetPage(setSelectedDecision)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm">
           <option value="">Todas las decisiones</option>
-          {Object.entries(DECISION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(DECISION_LABEL).filter(([v]) => v !== "no pertenece").map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </div>
 
