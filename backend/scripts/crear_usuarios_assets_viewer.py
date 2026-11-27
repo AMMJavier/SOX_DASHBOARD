@@ -7,6 +7,7 @@ solo crea el usuario si hay UNA coincidencia clara (si hay varias, prefiere la q
 Uso (en el servidor, desde la carpeta backend):
     .venv/bin/python scripts/crear_usuarios_assets_viewer.py            # busca y muestra, NO crea
     .venv/bin/python scripts/crear_usuarios_assets_viewer.py --crear    # busca y crea los usuarios
+    .venv/bin/python scripts/crear_usuarios_assets_viewer.py "Nombre Apellido"   # busca otra(s) persona(s)
 Variables opcionales: SOX_API (por defecto http://127.0.0.1:8000).
 """
 import getpass
@@ -20,7 +21,9 @@ import urllib.request
 
 API = os.getenv("SOX_API", "http://127.0.0.1:8000").rstrip("/")
 ROL = "assets_viewer"
-PERSONAS = ["Gary Ortiz", "Angel Ochoa", "Luis Arevalo", "Nadia Carriel", "Patricio Gordillo", "Rommel Carrillo"]
+# Ya creados antes: Gary Ortiz, Angel Ochoa, Luis Arevalo, Nadia Carriel, Patricio Gordillo, Rommel Carrillo.
+# También se pueden pasar otros nombres entre comillas: ... --crear "Nombre Apellido"
+PERSONAS = ["Pamela Castro"]
 
 
 def plain(value):
@@ -64,6 +67,7 @@ def search(token, name):
 
 def main():
     create = "--crear" in sys.argv
+    names = [a for a in sys.argv[1:] if not a.startswith("--")] or PERSONAS
     admin = input("Usuario administrador: ").strip()
     password = getpass.getpass("Contraseña: ")
     status, data = call("POST", "/auth/login", body={"username": admin, "password": password})
@@ -73,7 +77,7 @@ def main():
     token = data["access_token"]
 
     created = existing = skipped = 0
-    for name in PERSONAS:
+    for name in names:
         found = search(token, name)
         if len(found) != 1:
             skipped += 1
