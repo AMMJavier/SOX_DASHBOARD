@@ -49,7 +49,7 @@ const FIELDS = [
 ];
 
 const PAGE_SIZE = 20;
-const EMPTY_FILTERS = { q: "", id: "", serial: "", tipo: "", ciudad: "", localidad: "", eos: "" };
+const EMPTY_FILTERS = { q: "", id: "", serial: "", plataforma: "", tipo: "", ciudad: "", localidad: "", eos: "" };
 
 // El guion es una representación visual de vacío, no un cambio auditable.
 const isBlankMarker = (value) =>
@@ -62,7 +62,7 @@ export default function Inventory() {
   const [records, setRecords] = useState([]);
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
   const [applied, setApplied] = useState({ ...EMPTY_FILTERS });
-  const [options, setOptions] = useState({ tipo: [], ciudad: [], localidad: [] });
+  const [options, setOptions] = useState({ plataforma: [], tipo: [], ciudad: [], localidad: [] });
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -84,7 +84,7 @@ export default function Inventory() {
       try {
         const data = await getInventoryOptions();
         if (active) setOptions({
-          tipo: data.tipo ?? [], ciudad: data.ciudad ?? [], localidad: data.localidad ?? [],
+          plataforma: data.plataforma ?? [], tipo: data.tipo ?? [], ciudad: data.ciudad ?? [], localidad: data.localidad ?? [],
         });
       } catch (err) {
         if (active) setError(err.message || "No se pudieron cargar las opciones de filtros.");
@@ -104,6 +104,7 @@ export default function Inventory() {
           q: applied.q.trim(),
           id: applied.id,
           serial: applied.serial,
+          plataforma: applied.plataforma,
           tipo: applied.tipo,
           ciudad: applied.ciudad,
           localidad: applied.localidad,
@@ -287,6 +288,14 @@ export default function Inventory() {
             <input value={filters.serial} onChange={(e) => updateFilter("serial", e.target.value)}
               placeholder="Filtrar por número de serie"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400" />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-slate-600">Plataforma</span>
+            <select value={filters.plataforma} onChange={(e) => updateFilter("plataforma", e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">Todas las plataformas</option>
+              {options.plataforma.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
           </label>
           <label className="space-y-2">
             <span className="text-xs font-medium text-slate-600">Tipo de dispositivo</span>

@@ -504,7 +504,8 @@ const chartData =
           </div>
         </div>
 
-        <div className="h-[300px] w-full">
+        {/* Alto según la cantidad de plataformas para que se vean todas las etiquetas. */}
+        <div className="w-full" style={{ height: Math.max(300, plataformasData.length * 30) }}>
           {plataformasData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -531,6 +532,7 @@ const chartData =
                   type="category"
                   dataKey="nombre"
                   width={110}
+                  interval={0}
                   tick={{ fontSize: 12 }}
                 />
 

@@ -34,7 +34,7 @@ def inventory_options(db: Session = Depends(get_assets_db)):
     """Valores reales de la base, sin depender de la página actual."""
     try:
         options = {}
-        for field in ("tipo", "ciudad", "localidad"):
+        for field in ("plataforma", "tipo", "ciudad", "localidad"):
             # En PostgreSQL '' no es NULL (en Oracle sí): excluir ambos.
             rows = db.execute(text(f"""
                 SELECT DISTINCT TRIM({field}) AS valor
