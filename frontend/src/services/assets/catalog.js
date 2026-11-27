@@ -41,8 +41,9 @@ export function getAssetLogs(params = {}) {
 }
 
 // Opciones de filtros obtenidas de Oracle.
-export function getInventoryOptions() {
-  return request("/inventory/options");
+// Opciones de filtros en cascada: con plataforma / tipo / ciudad devuelve solo los valores asociados.
+export function getInventoryOptions({ plataforma = "", tipo = "", ciudad = "" } = {}) {
+  return request("/inventory/options", { plataforma, tipo, ciudad });
 }
 
 // Edición del activo por ID, sin modificar otros registros del inventario.

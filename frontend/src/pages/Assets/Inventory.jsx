@@ -78,13 +78,27 @@ export default function Inventory() {
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
 
+  // Filtros en cascada: Plataforma -> Tipo -> Ciudad -> Localidad. Cada lista se recarga
+  // con lo ya elegido arriba; sin plataforma se muestran todos los valores.
   useEffect(() => {
     let active = true;
     async function loadOptions() {
       try {
-        const data = await getInventoryOptions();
-        if (active) setOptions({
+        const data = await getInventoryOptions({
+          plataforma: filters.plataforma, tipo: filters.tipo, ciudad: filters.ciudad,
+        });
+        if (!active) return;
+        const next = {
           plataforma: data.plataforma ?? [], tipo: data.tipo ?? [], ciudad: data.ciudad ?? [], localidad: data.localidad ?? [],
+        };
+        setOptions(next);
+        // Si un valor elegido ya no existe con el nuevo filtro, se limpia.
+        setFilters((current) => {
+          const cleaned = { ...current };
+          ["tipo", "ciudad", "localidad"].forEach((key) => {
+            if (cleaned[key] && !next[key].some((value) => value.toUpperCase() === cleaned[key].toUpperCase())) cleaned[key] = "";
+          });
+          return ["tipo", "ciudad", "localidad"].some((key) => cleaned[key] !== current[key]) ? cleaned : current;
         });
       } catch (err) {
         if (active) setError(err.message || "No se pudieron cargar las opciones de filtros.");
@@ -92,7 +106,7 @@ export default function Inventory() {
     }
     loadOptions();
     return () => { active = false; };
-  }, [refresh]);
+  }, [filters.plataforma, filters.tipo, filters.ciudad, refresh]);
 
   useEffect(() => {
     let active = true;

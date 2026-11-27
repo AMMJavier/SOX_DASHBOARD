@@ -29,19 +29,41 @@ def _serialize(row) -> dict:
     return result
 
 
+# Orden de los filtros en cascada: cada lista solo muestra los valores que existen
+# con los filtros anteriores ya elegidos (Plataforma -> Tipo -> Ciudad -> Localidad).
+OPTION_FIELDS = ("plataforma", "tipo", "ciudad", "localidad")
+
+
 @router.get("/inventory/options")
-def inventory_options(db: Session = Depends(get_assets_db)):
-    """Valores reales de la base, sin depender de la página actual."""
+def inventory_options(
+    plataforma: Optional[str] = Query(default=None, max_length=200),
+    tipo: Optional[str] = Query(default=None, max_length=200),
+    ciudad: Optional[str] = Query(default=None, max_length=200),
+    db: Session = Depends(get_assets_db),
+):
+    """Valores reales de la base, sin depender de la página actual.
+
+    Sin filtros devuelve todos los valores. Con plataforma (y/o tipo, ciudad) devuelve
+    solo los tipos, ciudades y localidades asociados a lo ya elegido.
+    """
+    chosen = {"plataforma": plataforma, "tipo": tipo, "ciudad": ciudad}
     try:
         options = {}
-        for field in ("plataforma", "tipo", "ciudad", "localidad"):
+        for index, field in enumerate(OPTION_FIELDS):
             # En PostgreSQL '' no es NULL (en Oracle sí): excluir ambos.
+            conditions = [f"NULLIF(TRIM({field}), '') IS NOT NULL"]
+            params = {}
+            for parent in OPTION_FIELDS[:index]:
+                value = (chosen.get(parent) or "").strip()
+                if value:
+                    conditions.append(f"UPPER(TRIM({parent})) = UPPER(:{parent})")
+                    params[parent] = value
             rows = db.execute(text(f"""
                 SELECT DISTINCT TRIM({field}) AS valor
                 FROM {TABLE}
-                WHERE NULLIF(TRIM({field}), '') IS NOT NULL
+                WHERE {" AND ".join(conditions)}
                 ORDER BY valor
-            """)).scalars().all()
+            """), params).scalars().all()
             options[field] = [value for value in rows if value]
         return options
     except SQLAlchemyError as exc:
